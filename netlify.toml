@@ -1,0 +1,26 @@
+[build]
+  command = ""
+  publish = "."
+
+[[redirects]]
+  from = "/baidu-token"
+  to = "/.netlify/functions/baidu-token"
+  status = 200
+
+[[redirects]]
+  from = "/baidu-ocr"
+  to = "/.netlify/functions/baidu-ocr"
+  status = 200
+
+[[redirects]]
+  from = "/ping"
+  to = "/.netlify/functions/ping"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/qa-checker.html"
+  status = 200
+
+[functions]
+  node_bundler = "none"

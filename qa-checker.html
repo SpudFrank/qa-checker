@@ -1,0 +1,1750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物料质量检查系统</title>
+<script>
+// Tesseract.js v5 CDN - load async
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  s.onerror = function() { window._tesseractLoadFailed = 1; };
+  document.head.appendChild(s);
+})();
+</script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f6fa; color: #2d3436; min-height: 100vh; }
+
+/* Header */
+.header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 16px 24px; }
+.header-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 22px; color: #2d3436; }
+.header .subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+.btn-reset { font-size: 13px; color: #666; background: none; border: none; cursor: pointer; text-decoration: underline; }
+.btn-reset:hover { color: #333; }
+.btn-reset.hidden { display: none; }
+
+/* Steps */
+.steps { display: flex; align-items: center; justify-content: center; gap: 0; margin: 24px 0; }
+.step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; background: #ddd; color: #999; transition: all 0.3s; }
+.step-dot.active { background: #3b82f6; color: #fff; }
+.step-dot.done { background: #22c55e; color: #fff; }
+.step-line { width: 48px; height: 3px; background: #ddd; transition: all 0.3s; }
+.step-line.done { background: #3b82f6; }
+.step-label { font-size: 12px; color: #999; margin-left: 8px; }
+
+/* Container */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 24px 40px; }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card { background: #fff; border: 2px solid #e0e0e0; border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.2s; text-align: center; }
+.card:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(59,130,246,0.1); }
+.card.selected { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 2px 12px rgba(59,130,246,0.15); }
+.card .icon { font-size: 28px; margin-bottom: 8px; display: block; }
+.card .name { font-size: 14px; font-weight: 600; color: #333; }
+.card .desc { font-size: 12px; color: #999; margin-top: 4px; }
+.card.selected .name { color: #1d4ed8; }
+
+/* Section */
+.section { background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #e0e0e0; }
+.section h2 { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+
+/* Upload */
+.upload-zone { border: 2px dashed #ccc; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover { border-color: #3b82f6; background: #f8faff; }
+.upload-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+.upload-zone .upload-icon { font-size: 36px; color: #ccc; display: block; margin-bottom: 8px; }
+.upload-zone .upload-text { font-size: 14px; color: #888; }
+.upload-zone .upload-hint { font-size: 12px; color: #aaa; margin-top: 4px; }
+
+/* Image list */
+.image-list { margin-top: 16px; }
+.image-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #fafafa; border-radius: 10px; margin-bottom: 8px; border: 1px solid #eee; }
+.image-item .thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e0e0e0; flex-shrink: 0; }
+.image-item .info { flex: 1; min-width: 0; }
+.image-item .info .filename { font-size: 13px; font-weight: 500; color: #333; word-break: break-all; }
+.image-item .info .meta { font-size: 12px; color: #999; margin-top: 2px; }
+.lang-badge { display: inline-block; background: #dbeafe; color: #1d4ed8; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 4px; font-weight: 500; }
+.image-item .info textarea { width: 100%; margin-top: 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 6px; padding: 8px; resize: vertical; min-height: 40px; font-family: inherit; }
+.image-item .info textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.btn-primary:hover:not(:disabled) { background: #2563eb; }
+.btn-outline { background: #fff; color: #3b82f6; border-color: #3b82f6; }
+.btn-outline:hover:not(:disabled) { background: #eff6ff; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-danger { background: #fff; color: #ef4444; border-color: #fca5a5; }
+.btn-danger:hover:not(:disabled) { background: #fef2f2; }
+.btn-ocr { background: #fff; color: #3b82f6; border: 1px solid #93c5fd; }
+.btn-ocr:hover:not(:disabled) { background: #eff6ff; }
+.btn-ocr.loading { color: #93c5fd; }
+.btn-row { display: flex; gap: 8px; align-items: center; }
+
+/* Textarea */
+.req-textarea { width: 100%; border: 1px solid #ddd; border-radius: 10px; padding: 12px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 120px; }
+.req-textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+/* Results */
+.result-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+.result-card { border-radius: 10px; padding: 14px; text-align: center; border: 1px solid; }
+.result-card .count { font-size: 28px; font-weight: 700; }
+.result-card .label { font-size: 12px; margin-top: 2px; }
+.result-card.pass { background: #f0fdf4; border-color: #bbf7d0; }
+.result-card.pass .count { color: #16a34a; }
+.result-card.pass .label { color: #15803d; }
+.result-card.fail { background: #fef2f2; border-color: #fecaca; }
+.result-card.fail .count { color: #dc2626; }
+.result-card.fail .label { color: #b91c1c; }
+.result-card.warn { background: #fffbeb; border-color: #fde68a; }
+.result-card.warn .count { color: #d97706; }
+.result-card.warn .label { color: #b45309; }
+.result-card.manual { background: #faf5ff; border-color: #e9d5ff; }
+.result-card.manual .count { color: #9333ea; }
+.result-card.manual .label { color: #7e22ce; }
+
+.check-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 10px; margin-bottom: 8px; border: 1px solid; }
+.check-item .status-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: bold; }
+.check-item.pass { background: #f0fdf4; border-color: #bbf7d0; }
+.check-item.pass .status-icon { background: #16a34a; color: #fff; }
+.check-item.fail { background: #fef2f2; border-color: #fecaca; }
+.check-item.fail .status-icon { background: #dc2626; color: #fff; }
+.check-item.warn { background: #fffbeb; border-color: #fde68a; }
+.check-item.warn .status-icon { background: #d97706; color: #fff; }
+.check-item.manual { background: #faf5ff; border-color: #e9d5ff; }
+.check-item.manual .status-icon { background: #9333ea; color: #fff; }
+.check-item.pending { background: #f9fafb; border-color: #e5e7eb; }
+.check-item.pending .status-icon { background: #9ca3af; color: #fff; }
+.check-item .check-body { flex: 1; }
+.check-item .check-label { font-size: 14px; font-weight: 500; }
+.check-item .check-desc { font-size: 12px; color: #888; margin-top: 2px; }
+.check-item .check-detail { font-size: 12px; background: #fff; border-radius: 6px; padding: 8px; margin-top: 8px; border: 1px solid #eee; color: #555; }
+.check-item .status-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; white-space: nowrap; }
+.check-item.pass .status-badge { background: #bbf7d0; color: #15803d; }
+.check-item.fail .status-badge { background: #fecaca; color: #b91c1c; }
+.check-item.warn .status-badge { background: #fde68a; color: #92400e; }
+.check-item.manual .status-badge { background: #e9d5ff; color: #7e22ce; }
+.check-item.pending .status-badge { background: #e5e7eb; color: #6b7280; }
+
+.verdict { padding: 16px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; border: 1px solid; }
+.verdict.fail { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.verdict.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.verdict.pass { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.upload-status { margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; display: none; }
+.upload-status.show { display: block; }
+.upload-status.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.upload-status.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+.section-nav { display: flex; gap: 8px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1>&#128269; 物料质量检查系统</h1>
+      <div class="subtitle">上传美术物料和需求文本，自动检查内容一致性</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;" id="apiConfigArea">
+        <select id="providerSelect" onchange="switchProvider()" style="font-size:11px;border:1px solid #ddd;border-radius:6px;padding:4px 6px;">
+          <option value="baidu" selected>百度云OCR</option>
+          <option value="generic">通用AI API</option>
+        </select>
+        <!-- Baidu fields -->
+        <span id="baiduFields">
+          <input type="text" id="baiduApiKey" placeholder="API Key" style="width:140px;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-family:monospace;" onchange="saveBaiduConfig()">
+          <input type="password" id="baiduSecretKey" placeholder="Secret Key" style="width:140px;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-family:monospace;" onchange="saveBaiduConfig()">
+        </span>
+        <!-- Generic AI fields -->
+        <span id="genericFields" style="display:none;">
+          <input type="password" id="apiKeyInput" placeholder="任意厂商 API Key" style="width:200px;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-family:monospace;" onchange="saveApiKey()">
+        </span>
+        <button id="btnTestApi" class="btn btn-sm btn-outline" onclick="testApiKey()" style="font-size:11px;padding:3px 8px;">连接测试</button>
+        <span id="apiKeyStatus" style="font-size:11px;color:#999;white-space:nowrap;"></span>
+      </div>
+      <button class="btn-reset hidden" id="btnReset" onclick="resetAll()">重新开始</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Step indicator -->
+  <div class="steps" style="margin-bottom:24px;">
+    <div class="step-dot active" id="stepDot1">1</div><div class="step-line" id="stepLine1"></div>
+    <div class="step-dot" id="stepDot2">2</div><div class="step-line" id="stepLine2"></div>
+    <div class="step-dot" id="stepDot3">3</div><div class="step-line" id="stepLine3"></div>
+    <div class="step-dot" id="stepDot4">4</div>
+    <span class="step-label" id="stepLabel">选择类别</span>
+  </div>
+
+  <!-- Step 1: Category -->
+  <div id="step1">
+    <h2 style="font-size:16px;margin-bottom:14px;">选择物料类别</h2>
+    <div class="cards" id="categoryCards"></div>
+    <div id="selectedCategoryInfo" class="hidden" style="margin-top:14px;padding:14px;background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;font-size:13px;color:#1d4ed8;"></div>
+  </div>
+
+  <!-- Step 2: Upload -->
+  <div id="step2" class="hidden">
+    <div class="section">
+      <div class="section-header">
+        <h2 id="step2Title">上传待检查物料</h2>
+        <div class="section-nav">
+          <button class="btn btn-outline btn-sm" onclick="goToStep(1)">返回</button>
+          <button class="btn btn-primary btn-sm" id="btnNextTo3" onclick="goToStep(3)">下一步：输入需求</button>
+        </div>
+      </div>
+      <div class="upload-zone" id="uploadZone">
+        <span class="upload-icon">&#128206;</span>
+        <span class="upload-text">点击选择图片，或拖拽到此处</span>
+        <span class="upload-hint">支持 PNG、JPG、WebP，可多选</span>
+        <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+      </div>
+      <div class="upload-status" id="uploadStatus"></div>
+      <div class="image-list" id="imageList"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Requirements -->
+  <div id="step3" class="hidden">
+    <div class="section">
+      <div class="section-header">
+        <h2>输入需求文本</h2>
+        <button class="btn btn-outline btn-sm" onclick="goToStep(2)">返回上一步</button>
+      </div>
+      <p style="font-size:13px;color:#888;margin-bottom:10px;">请粘贴或输入对应物料的需求文本（活动名称、时间、CDK码、作者等信息）</p>
+      <textarea class="req-textarea" id="reqText" placeholder="例如：&#10;活动名称：XXX&#10;活动时间：2024/01/15 - 2024/01/30&#10;兑换码：ABCD-1234-EFGH&#10;作者：张三&#10;..."></textarea>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="btnStartCheck" onclick="startCheck()" style="width:100%;justify-content:center;padding:12px;">
+          &#128270; 开始检查
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Results -->
+  <div id="step4" class="hidden">
+    <div class="section">
+      <div class="section-header">
+        <h2>检查结果</h2>
+        <div class="section-nav">
+          <button class="btn btn-outline btn-sm" onclick="exportReport()">&#128190; 导出报告</button>
+          <button class="btn btn-outline btn-sm" onclick="goToStep(3)">重新检查</button>
+        </div>
+      </div>
+      <div class="result-summary" id="resultSummary"></div>
+      <div id="checkItems"></div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// Data
+// ============================================================
+const CATEGORIES = [
+  {
+    id: 'community', name: '社区通用素材发布', icon: '&#128227;', desc: '社区通用活动/攻略素材检查',
+    checks: [
+      { id:'en_accurate', label:'EN图片是否准确', category:'image', desc:'检查英文版本图片内容是否与需求文档一致' },
+      { id:'ru_accurate', label:'RU图片是否准确', category:'image', desc:'检查俄文版本图片内容是否与需求文档一致' },
+      { id:'hero_accurate', label:'英雄头像/神器/关卡名称是否准确', category:'content', desc:'OCR提取图片中英雄、神器、关卡等关键名称与需求比对' },
+      { id:'author_accurate', label:'攻略提供人姓名是否准确', category:'content', desc:'检查攻略作者姓名是否与需求中指定的一致' },
+    ]
+  },
+  {
+    id: 'cdk', name: '携带CDK奖励类素材发布', icon: '&#127873;', desc: 'CDK兑换码相关素材检查',
+    checks: [
+      { id:'cdk_image_match', label:'图片内CDK是否与贴文内一致', category:'cdk', desc:'OCR提取图片中CDK码与需求文本中CDK码比对' },
+      { id:'cdk_redeem', label:'CDK是否正常兑换', category:'manual', desc:'需人工验证CDK兑换是否成功' },
+      { id:'cdk_validity', label:'CDK有效期是否一致', category:'date', desc:'检查图片与需求中有效期是否匹配' },
+    ]
+  },
+  {
+    id: 'announcement', name: '公告类素材发布', icon: '&#128226;', desc: '游戏公告相关素材检查',
+    checks: [
+      { id:'time_accurate', label:'图片内时间是否与实际一致', category:'date', desc:'OCR提取图片中时间/日期信息与需求比对' },
+      { id:'en_correct', label:'公告EN图片是否正确', category:'image', desc:'检查英文公告图片内容准确性' },
+      { id:'ru_correct', label:'公告RU图片是否正确', category:'image', desc:'检查俄文公告图片内容准确性' },
+    ]
+  },
+  {
+    id: 'internal', name: '内宣素材传递', icon: '&#128203;', desc: '内部宣传素材检查',
+    checks: [
+      { id:'text_correct', label:'图片内文案是否正确', category:'content', desc:'OCR提取图片文案与需求比对' },
+      { id:'lang_filename', label:'EN,RU,DE,FR四语是否与文件名一致', category:'filename', desc:'检查各语言版本文件名与实际内容语言是否匹配' },
+      { id:'platform_match', label:'跳转平台是否一致', category:'manual', desc:'需人工确认跳转链接指向平台是否正确' },
+      { id:'reward_icon_match', label:'奖励ICON与实际奖励是否一致', category:'manual', desc:'需人工比对图标与实际奖励道具' },
+      { id:'reward_icon_bg', label:'奖励ICON背景颜色是否一致', category:'manual', desc:'需人工确认各奖励图标背景颜色统一' },
+    ]
+  }
+];
+
+const LANG_CODES = ['EN','RU','DE','FR','ZH','JA','KO','ES','PT','IT'];
+
+// Map display language code to Tesseract OCR language pack code
+const TESSERACT_LANG_MAP = {
+  'EN': 'eng', 'RU': 'rus', 'DE': 'deu', 'FR': 'fra',
+  'ZH': 'chi_sim', 'JA': 'jpn', 'KO': 'kor',
+  'ES': 'spa', 'PT': 'por', 'IT': 'ita'
+};
+// Available OCR language options for manual selection
+const OCR_LANG_OPTIONS = [
+  { code: 'eng+chi_sim', label: 'English + 中文 (默认)' },
+  { code: 'eng', label: 'English' },
+  { code: 'chi_sim', label: '中文简体' },
+  { code: 'rus', label: 'Русский (Russian)' },
+  { code: 'deu', label: 'Deutsch (German)' },
+  { code: 'fra', label: 'Français (French)' },
+  { code: 'jpn', label: '日本語' },
+  { code: 'kor', label: '한국어' },
+];
+
+// ============================================================
+// State
+// ============================================================
+let state = {
+  step: 1,
+  categoryId: null,
+  images: [],       // { file, name, preview, lang, ocrText }
+  reqText: '',
+  checkResults: null,
+  ocrLoading: {}
+};
+
+// ============================================================
+// Provider Switching
+// ============================================================
+function switchProvider() {
+  var sel = document.getElementById('providerSelect').value;
+  var baiduFields = document.getElementById('baiduFields');
+  var genericFields = document.getElementById('genericFields');
+  if (sel === 'baidu') {
+    baiduFields.style.display = '';
+    genericFields.style.display = 'none';
+    localStorage.setItem('ocr_provider_type', 'baidu');
+  } else {
+    baiduFields.style.display = 'none';
+    genericFields.style.display = '';
+    localStorage.setItem('ocr_provider_type', 'generic');
+  }
+  updateEngineStatus();
+}
+
+function getProviderType() {
+  return localStorage.getItem('ocr_provider_type') || 'baidu';
+}
+
+// ============================================================
+// Generic API Key & Provider Config
+// ============================================================
+function saveApiKey() {
+  var key = document.getElementById('apiKeyInput').value.trim();
+  if (key) {
+    localStorage.setItem('ocr_api_key', key);
+  } else {
+    localStorage.removeItem('ocr_api_key');
+    localStorage.removeItem('ocr_provider');
+  }
+  updateEngineStatus();
+}
+
+function getApiKey() {
+  return localStorage.getItem('ocr_api_key') || '';
+}
+
+// ============================================================
+// Baidu Cloud Config
+// ============================================================
+function saveBaiduConfig() {
+  var ak = document.getElementById('baiduApiKey').value.trim();
+  var sk = document.getElementById('baiduSecretKey').value.trim();
+  if (ak) localStorage.setItem('baidu_api_key', ak);
+  else localStorage.removeItem('baidu_api_key');
+  if (sk) localStorage.setItem('baidu_secret_key', sk);
+  else localStorage.removeItem('baidu_secret_key');
+  updateEngineStatus();
+}
+
+function getBaiduApiKey() { return localStorage.getItem('baidu_api_key') || ''; }
+function getBaiduSecretKey() { return localStorage.getItem('baidu_secret_key') || ''; }
+var baiduToken = null;
+var baiduTokenExpiry = 0;
+
+async function getBaiduAccessToken() {
+  if (baiduToken && Date.now() < baiduTokenExpiry) return baiduToken;
+  var ak = getBaiduApiKey();
+  var sk = getBaiduSecretKey();
+  if (!ak || !sk) throw new Error('请填写百度云 API Key 和 Secret Key');
+
+  var base = getBaiduBase();
+  var url;
+  if (_baiduProxyAvailable) {
+    url = base + '/baidu-token?ak=' + encodeURIComponent(ak) + '&sk=' + encodeURIComponent(sk);
+  } else {
+    url = base + '/oauth/2.0/token?grant_type=client_credentials&client_id=' + encodeURIComponent(ak) + '&client_secret=' + encodeURIComponent(sk);
+  }
+  var resp = await fetch(url);
+  var data = await resp.json();
+  if (data.error) throw new Error('百度Token获取失败: ' + (data.error_description || data.error));
+  baiduToken = data.access_token;
+  baiduTokenExpiry = Date.now() + (data.expires_in - 300) * 1000;
+  return baiduToken;
+}
+
+// ============================================================
+// Baidu Cloud — Proxy (CORS bypass)
+// ============================================================
+var _isSameOrigin = window.location.protocol !== 'file:';
+var _baiduProxyAvailable = _isSameOrigin ? true : null;
+var BAIDU_PROXY = 'http://localhost:3456';
+
+async function checkBaiduProxy() {
+  if (_isSameOrigin) {
+    // Served by our server — same origin, just check the proxy endpoint
+    try {
+      var resp = await fetch('/ping');
+      _baiduProxyAvailable = resp.ok;
+    } catch(e) {
+      _baiduProxyAvailable = false;
+    }
+    return _baiduProxyAvailable;
+  }
+  // File:// mode — check if standalone proxy is running
+  try {
+    var resp = await fetch(BAIDU_PROXY + '/ping');
+    _baiduProxyAvailable = resp.ok;
+  } catch(e) {
+    _baiduProxyAvailable = false;
+  }
+  return _baiduProxyAvailable;
+}
+
+function getBaiduBase() {
+  // Same-origin: server handles everything, use relative paths
+  if (_isSameOrigin) return '';
+  // File:// with proxy running
+  if (_baiduProxyAvailable === true) return BAIDU_PROXY;
+  // Direct (will fail with CORS)
+  return 'https://aip.baidubce.com';
+}
+
+// Baidu OCR language mapping
+var BAIDU_LANG_MAP = {
+  'rus': 'RUS', 'deu': 'GER', 'fra': 'FRE', 'eng': 'ENG',
+  'chi_sim': 'CHN_ENG', 'jpn': 'JAP', 'kor': 'KOR',
+  'spa': 'SPA', 'por': 'POR', 'ita': 'ITA'
+};
+
+async function baiduOcr(dataUrl, langHint) {
+  var token = await getBaiduAccessToken();
+  var base64 = dataUrl.split(',')[1];
+  var lang = BAIDU_LANG_MAP[langHint] || 'CHN_ENG';
+
+  var formData = new URLSearchParams();
+  formData.append('image', base64);
+  formData.append('language_type', lang);
+  formData.append('detect_direction', 'true');
+  formData.append('paragraph', 'true');
+
+  var base = getBaiduBase();
+  var url;
+  if (_baiduProxyAvailable) {
+    url = base + '/baidu-ocr?access_token=' + encodeURIComponent(token);
+  } else {
+    url = base + '/rest/2.0/ocr/v1/accurate_basic?access_token=' + encodeURIComponent(token);
+  }
+
+  var resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData.toString()
+  });
+
+  var data = await resp.json();
+  if (data.error_code) throw new Error('百度OCR错误 ' + data.error_code + ': ' + (data.error_msg || ''));
+
+  // Combine all recognized text blocks
+  var words = (data.words_result || []).map(function(w) { return w.words; });
+  return words.join('\n');
+}
+
+// ============================================================
+// Provider Config
+// ============================================================
+function getProviderConfig() {
+  try { return JSON.parse(localStorage.getItem('ocr_provider') || 'null'); } catch(e) { return null; }
+}
+
+function loadApiKey() {
+  var key = getApiKey();
+  if (key) document.getElementById('apiKeyInput').value = key;
+  // Load Baidu keys
+  var bak = getBaiduApiKey();
+  var bsk = getBaiduSecretKey();
+  if (bak) document.getElementById('baiduApiKey').value = bak;
+  if (bsk) document.getElementById('baiduSecretKey').value = bsk;
+  // Restore provider type
+  var ptype = getProviderType();
+  document.getElementById('providerSelect').value = ptype;
+  switchProvider();
+  updateEngineStatus();
+}
+
+function updateEngineStatus() {
+  var statusEl = document.getElementById('apiKeyStatus');
+  var ptype = getProviderType();
+
+  if (ptype === 'baidu') {
+    var ak = getBaiduApiKey();
+    var sk = getBaiduSecretKey();
+    if (!ak || !sk) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span>请填写百度云API Key + Secret Key';
+      statusEl.style.color = '#d97706';
+    } else if (_baiduProxyAvailable === false) {
+      if (window.location.protocol === 'file:') {
+        statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-right:4px;"></span>代理未运行，请执行 node server.js';
+      } else {
+        statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-right:4px;"></span>服务器代理异常，请重启 node server.js';
+      }
+      statusEl.style.color = '#dc2626';
+    } else if (baiduToken && Date.now() < baiduTokenExpiry) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;"></span>百度云OCR 就绪';
+      statusEl.style.color = '#16a34a';
+    } else if (_baiduProxyAvailable === null) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span>检测代理中...';
+      statusEl.style.color = '#d97706';
+    } else {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;margin-right:4px;"></span>百度云已配置，点击测试';
+      statusEl.style.color = '#3b82f6';
+    }
+    return;
+  }
+
+  // Generic AI provider
+  var cfg = getProviderConfig();
+  if (!getApiKey()) {
+    statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span>未配置（Tesseract本地识别）';
+    statusEl.style.color = '#d97706';
+  } else if (!cfg) {
+    statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;margin-right:4px;"></span>已配置Key，点击探测';
+    statusEl.style.color = '#3b82f6';
+  } else if (cfg.vision) {
+    statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;"></span>视觉就绪: ' + cfg.name + '/' + cfg.model;
+    statusEl.style.color = '#16a34a';
+  } else {
+    statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d97706;margin-right:4px;"></span>' + cfg.name + ' 无视觉，Tesseract+文本纠错';
+    statusEl.style.color = '#d97706';
+  }
+}
+
+// ============================================================
+// Provider Definitions
+// ============================================================
+var PROVIDERS = [
+  {
+    name: 'OpenAI',
+    url: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o-mini',
+    format: 'openai',
+    authHeader: 'Bearer',
+    keyHint: 'sk-'
+  },
+  {
+    name: 'DeepSeek',
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    format: 'openai',
+    authHeader: 'Bearer',
+    keyHint: 'sk-'
+  },
+  {
+    name: 'Anthropic',
+    url: 'https://api.anthropic.com/v1/messages',
+    model: 'claude-3-haiku-20240307',
+    format: 'anthropic',
+    authHeader: 'x-api-key',
+    keyHint: 'sk-ant'
+  },
+  {
+    name: 'Groq',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama-3.2-11b-vision-preview',
+    format: 'openai',
+    authHeader: 'Bearer',
+    keyHint: 'gsk_'
+  },
+  {
+    name: 'Together',
+    url: 'https://api.together.xyz/v1/chat/completions',
+    model: 'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo',
+    format: 'openai',
+    authHeader: 'Bearer',
+    keyHint: ''
+  },
+];
+
+// Tiny 1x1 PNG for vision probe
+var TEST_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+async function probeAllProviders() {
+  var key = getApiKey();
+  if (!key) return;
+
+  // Sort: put providers matching key prefix first
+  var sorted = PROVIDERS.slice().sort(function(a, b) {
+    var aMatch = a.keyHint && key.indexOf(a.keyHint) === 0 ? 0 : 1;
+    var bMatch = b.keyHint && key.indexOf(b.keyHint) === 0 ? 0 : 1;
+    return aMatch - bMatch;
+  });
+
+  var results = [];
+  for (var i = 0; i < sorted.length; i++) {
+    var p = sorted[i];
+    try {
+      var body, headers;
+      if (p.format === 'openai') {
+        headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key };
+        body = JSON.stringify({
+          model: p.model,
+          messages: [{ role: 'user', content: [
+            { type: 'image_url', image_url: { url: TEST_IMG } },
+            { type: 'text', text: 'say OK' }
+          ]}],
+          max_tokens: 5, temperature: 0
+        });
+      } else if (p.format === 'anthropic') {
+        headers = { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+        body = JSON.stringify({
+          model: p.model,
+          max_tokens: 5,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: TEST_IMG.split(',')[1] } },
+            { type: 'text', text: 'say OK' }
+          ]}]
+        });
+      }
+
+      var resp = await fetch(p.url, { method: 'POST', headers: headers, body: body });
+
+      if (resp.ok) {
+        var data = await resp.json();
+        // Check if response actually processed vision (contains 'OK' or similar)
+        var content = '';
+        if (p.format === 'openai') content = data.choices && data.choices[0] ? data.choices[0].message.content : '';
+        else if (p.format === 'anthropic') content = data.content ? data.content[0].text : '';
+
+        var vision = content.length > 0;
+        results.push({
+          provider: p.name,
+          model: p.model,
+          url: p.url,
+          format: p.format,
+          vision: vision,
+          detail: vision ? '视觉模型可用' : '返回空（可能不支持图片）'
+        });
+        if (vision) {
+          // Found a working vision model, save config and stop
+          localStorage.setItem('ocr_provider', JSON.stringify({
+            name: p.name, model: p.model, url: p.url, format: p.format,
+            vision: true, detail: p.name + '/' + p.model
+          }));
+          updateEngineStatus();
+          return results;
+        }
+      } else if (resp.status === 401 || resp.status === 403) {
+        results.push({ provider: p.name, detail: 'Key无权限(' + resp.status + ')' });
+      } else if (resp.status === 404) {
+        results.push({ provider: p.name, detail: '端点/模型不存在(' + resp.status + ')' });
+      } else {
+        var eb = await resp.text().catch(function(){ return ''; });
+        // Check if error mentions image/vision/multimodal support
+        if (eb.indexOf('image') >= 0 || eb.indexOf('vision') >= 0 || eb.indexOf('multimodal') >= 0) {
+          results.push({ provider: p.name, detail: '不支持图片输入' });
+        } else {
+          results.push({ provider: p.name, detail: '错误' + resp.status + ': ' + eb.slice(0,60) });
+        }
+      }
+    } catch(err) {
+      results.push({ provider: p.name, detail: '网络不通: ' + err.message.slice(0,50) });
+    }
+  }
+
+  // No vision model found - save as text-only provider using the first working one
+  // Let the pipeline use Tesseract + text cleanup
+  var firstWorking = results.find(function(r) { return r.detail && r.detail.indexOf('视觉模型可用') >= 0; });
+  if (!firstWorking) {
+    // Find first provider that responded (even without vision)
+    var anyWorking = results.find(function(r) { return r.provider && !r.detail; });
+    if (anyWorking) {
+      var origProvider = PROVIDERS.find(function(p) { return p.name === anyWorking.provider; });
+      localStorage.setItem('ocr_provider', JSON.stringify({
+        name: origProvider.name, model: origProvider.model, url: origProvider.url, format: origProvider.format,
+        vision: false, detail: origProvider.name + ' (文本)'
+      }));
+    } else {
+      // Any provider that at least responded
+      var fallback = results.find(function(r) { return r.provider; });
+      if (fallback) {
+        var fp = PROVIDERS.find(function(p) { return p.name === fallback.provider; });
+        localStorage.setItem('ocr_provider', JSON.stringify({
+          name: fp ? fp.name : fallback.provider, model: fp ? fp.model : '', url: fp ? fp.url : '', format: fp ? fp.format : 'openai',
+          vision: false, detail: '文本模式'
+        }));
+      }
+    }
+  }
+
+  // Store results for debug display
+  window._probeResults = results;
+  updateEngineStatus();
+  return results;
+}
+
+async function testApiKey() {
+  var btn = document.getElementById('btnTestApi');
+  var statusEl = document.getElementById('apiKeyStatus');
+  btn.disabled = true;
+  btn.textContent = '测试中...';
+  statusEl.textContent = '正在检测...';
+  statusEl.style.color = '#3b82f6';
+
+  // ---- Baidu mode ----
+  if (getProviderType() === 'baidu') {
+    saveBaiduConfig();
+    var ak = getBaiduApiKey();
+    var sk = getBaiduSecretKey();
+    if (!ak || !sk) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span>请填写百度云 API Key 和 Secret Key';
+      statusEl.style.color = '#d97706';
+      btn.disabled = false;
+      btn.textContent = '连接测试';
+      return;
+    }
+    try {
+      var btoken = await getBaiduAccessToken();
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;"></span>百度云OCR 连接成功！Token 已获取';
+      statusEl.style.color = '#16a34a';
+    } catch (err) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#dc2626;margin-right:4px;"></span>百度云连接失败: ' + (err.message || '未知错误').slice(0, 60);
+      statusEl.style.color = '#dc2626';
+      baiduToken = null;
+      baiduTokenExpiry = 0;
+    }
+    btn.disabled = false;
+    btn.textContent = '连接测试';
+    return;
+  }
+
+  // ---- Generic AI mode ----
+  var key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { alert('请先输入 API Key（支持 OpenAI、DeepSeek、Anthropic、Groq 等）'); btn.disabled = false; btn.textContent = '连接测试'; return; }
+
+  btn.textContent = '探测中...';
+  statusEl.textContent = '正在逐个检测厂商...';
+  statusEl.style.color = '#3b82f6';
+
+  saveApiKey(); // Save key immediately
+
+  var results = await probeAllProviders();
+
+  btn.disabled = false;
+  btn.textContent = '探测视觉能力';
+
+  // Show detailed results
+  if (results && results.length > 0) {
+    var foundVision = results.find(function(r) { return r.vision; });
+    if (foundVision) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;"></span>视觉就绪: ' + foundVision.provider + '/' + foundVision.model;
+      statusEl.style.color = '#16a34a';
+    } else {
+      var failedList = results.map(function(r) {
+        return r.provider + ': ' + (r.detail || '未测试');
+      }).join('；');
+      statusEl.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d97706;margin-right:4px;"></span>无视觉模型。' + failedList;
+      statusEl.style.color = '#d97706';
+    }
+  }
+
+  updateEngineStatus();
+}
+
+// ============================================================
+// Provider-agnostic Text Cleanup (Tesseract → AI fix)
+// ============================================================
+async function textCleanupViaProvider(rawOcrText, langHint, filename, provCfg) {
+  var apiKey = getApiKey();
+  if (!apiKey) throw new Error('未配置API Key');
+
+  var langMap = {
+    'rus': 'Russian', 'deu': 'German', 'fra': 'French',
+    'eng': 'English', 'chi_sim': 'Chinese', 'jpn': 'Japanese', 'kor': 'Korean'
+  };
+  var langName = langMap[langHint] || '';
+
+  var prompt = 'Below is raw OCR output from an image. The OCR may contain garbled characters, ' +
+    'misrecognized letters (especially for Cyrillic/non-Latin scripts), and formatting errors.\n\n' +
+    'Your task: reconstruct the ORIGINAL text that was in the image. ' +
+    'Fix misrecognized characters, restore correct words, and preserve the original language and formatting.\n\n' +
+    'Rules:\n' +
+    '- Output ONLY the corrected text, nothing else.\n' +
+    '- Preserve line breaks and structure.\n' +
+    '- Do NOT translate or summarize.\n' +
+    '- If a word is clearly garbled beyond recognition, leave it as-is rather than guessing.\n' +
+    '- Pay special attention to: dates, numbers, codes (like CDK), names, and proper nouns.\n' +
+    (langName ? '- The original text is in ' + langName + '. Fix characters to match this language.\n' : '') +
+    (filename ? '- Filename: ' + filename + ' (may hint at content/language)\n' : '') +
+    '\nRaw OCR text:\n---\n' + rawOcrText + '\n---';
+
+  var resp = await fetch(provCfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({
+      model: provCfg.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4096, temperature: 0.1,
+    }),
+  });
+
+  if (!resp.ok) {
+    var errBody = await resp.text().catch(function(){ return ''; });
+    throw new Error(provCfg.name + ' 返回 ' + resp.status + ': ' + errBody.slice(0, 200));
+  }
+
+  var data = await resp.json();
+  return { text: data.choices[0].message.content.trim(), model: provCfg.model };
+}
+
+// ============================================================
+// Init
+// ============================================================
+function init() {
+  loadApiKey();
+  // Check Baidu proxy and pre-load token if configured
+  if (getProviderType() === 'baidu' && getBaiduApiKey() && getBaiduSecretKey()) {
+    updateEngineStatus(); // show "detecting proxy..."
+    checkBaiduProxy().then(function(ok) {
+      if (ok) {
+        return getBaiduAccessToken();
+      }
+    }).then(function() {
+      updateEngineStatus();
+    }).catch(function() {
+      updateEngineStatus();
+    });
+  }
+  // Auto-probe if provider config exists
+  if (getApiKey() && getProviderConfig()) { updateEngineStatus(); }
+  // Render category cards
+  const cardsEl = document.getElementById('categoryCards');
+  cardsEl.innerHTML = CATEGORIES.map(c => `
+    <div class="card" data-cat="${c.id}" onclick="selectCategory('${c.id}')">
+      <span class="icon">${c.icon}</span>
+      <div class="name">${c.name}</div>
+      <div class="desc">${c.desc}</div>
+    </div>
+  `).join('');
+
+  // Upload zone click
+  document.getElementById('uploadZone').addEventListener('click', function(e) {
+    document.getElementById('fileInput').click();
+  });
+
+  // File input change
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    handleFiles(e.target.files);
+  });
+
+  // Drag and drop
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', function(e) { e.preventDefault(); zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function extractLang(filename) {
+  const upper = filename.toUpperCase();
+  for (const code of LANG_CODES) {
+    if (new RegExp(`[_\\.\\-]${code}[_\\.\\-]`,'i').test(upper)) return code;
+    if (new RegExp(`[_\\.\\-]${code}$`,'i').test(upper)) return code;
+    if (new RegExp(`^${code}[_\\.\\-]`,'i').test(upper)) return code;
+    if (upper.includes(`(${code})`) || upper.includes(`[${code}]`)) return code;
+  }
+  return null;
+}
+
+function extractDates(text) {
+  if (!text) return [];
+  // Normalize: collapse spaces around dashes in date ranges like "10.05 - 29.05"
+  var norm = text.replace(/\s*[-–—]\s*/g, '-');
+  var pats = [
+    // Year-first: 2024/01/15, 2024-01-15, 2024.01.15
+    /\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}/g,
+    // Year-last: 15/01/2024
+    /\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}/g,
+    // Chinese: 2024年1月15日
+    /\d{4}年\d{1,2}月\d{1,2}日/g,
+    // Chinese short: 1月15日
+    /\d{1,2}月\d{1,2}日/g,
+    // Dots with year: 15.01.2024
+    /\d{1,2}\.\d{1,2}\.\d{4}/g,
+    // DD.MM without year: 10.05, 29.05
+    /\d{1,2}\.\d{1,2}/g,
+    // DD.MM-DD.MM range without year: 10.05-29.05
+    /\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}/g,
+    // DD/MM without year: 10/05
+    /\d{1,2}\/\d{1,2}/g,
+    // English: Jan 15, 2024
+    /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}/gi,
+    // English: 15 Jan 2024
+    /\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}/gi,
+    // Russian: 10 мая 2026
+    /\d{1,2}\s+(?:янв|фев|мар|апр|ма[яй]|июн|июл|авг|сен|окт|ноя|дек)[а-я]*\s+\d{4}/gi,
+  ];
+  var all = [];
+  for (var i = 0; i < pats.length; i++) {
+    var matches = norm.match(pats[i]) || [];
+    all.push.apply(all, matches);
+  }
+  // Also match date ranges with spaces: "10.05 - 29.05"
+  var rangeMatch = norm.match(/\d{1,2}\.\d{1,2}\s*[-–—]\s*\d{1,2}\.\d{1,2}/g);
+  if (rangeMatch) all.push.apply(all, rangeMatch);
+  return [...new Set(all.map(function(d) { return d.replace(/\s+/g, ' ').trim(); }))];
+}
+
+function extractCDKs(text) {
+  if (!text) return [];
+  // Normalize Cyrillic lookalikes to Latin for CDK detection
+  // OCR often returns Cyrillic chars that visually match Latin letters
+  var cyr2lat = {
+    'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M',
+    'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T',
+    'У': 'Y', 'Х': 'X', 'а': 'A', 'е': 'E', 'о': 'O',
+    'р': 'P', 'с': 'C', 'у': 'Y', 'х': 'X', 'к': 'K',
+    'н': 'H', 'м': 'M', 'в': 'B', 'т': 'T'
+  };
+  var normText = text;
+  for (var k in cyr2lat) {
+    if (!cyr2lat.hasOwnProperty(k)) continue;
+    normText = normText.replace(new RegExp(k, 'g'), cyr2lat[k]);
+  }
+  var results = [];
+  // Hyphenated codes: ABCD-1234-EFGH or WHOWILLSAVET-YA53 (when OCR adds hyphens)
+  var p1 = normText.match(/[A-Z0-9]{4,}-[A-Z0-9]{4,}(-[A-Z0-9]{4,})?/gi) || [];
+  // Continuous codes 8+ chars: WHOWILLSAVETYA53
+  var p2 = normText.match(/[A-Z0-9]{8,}/g) || [];
+  results.push.apply(results, p1);
+  results.push.apply(results, p2);
+  // Also try to find CDK-like patterns near keywords like "код", "code", "CDK", "CDKey"
+  var cdkBlock = text.match(/(?:код|code|CDK|CDKey|兑换码|礼品码)[:\s]*([A-Za-zА-Яа-я0-9\-]{6,})/gi);
+  if (cdkBlock) {
+    for (var i = 0; i < cdkBlock.length; i++) {
+      var m = cdkBlock[i].match(/[A-Za-zА-Яа-я0-9\-]{6,}$/i);
+      if (m) {
+        var code = m[0];
+        for (var k2 in cyr2lat) {
+          if (!cyr2lat.hasOwnProperty(k2)) continue;
+          code = code.replace(new RegExp(k2, 'g'), cyr2lat[k2]);
+        }
+        results.push(code);
+      }
+    }
+  }
+  // Deduplicate and filter
+  var seen = {};
+  return results.filter(function(c) {
+    var upper = c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (upper.length < 6 || upper.length > 30) return false;
+    if (seen[upper]) return false;
+    seen[upper] = true;
+    return true;
+  });
+}
+
+function calcSimilarity(t1, t2) {
+  if (!t1 || !t2) return 0;
+  const norm = t => t.toLowerCase().replace(/[^\w\s一-鿿]/g,' ').replace(/\s+/g,' ').trim();
+  const a = norm(t1), b = norm(t2);
+  if (!a || !b) return 0;
+  const wa = new Set(a.split(' ').filter(w => w.length > 1));
+  const wb = new Set(b.split(' ').filter(w => w.length > 1));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  const inter = new Set([...wa].filter(w => wb.has(w)));
+  return inter.size / new Set([...wa, ...wb]).size;
+}
+
+function findPhrases(text, phrases) {
+  if (!text || !phrases.length) return { found:[], missing:phrases };
+  const lower = text.toLowerCase();
+  const found = [], missing = [];
+  for (const p of phrases) found.push(lower.includes(p.toLowerCase()) ? p : missing.push(p) && null);
+  return { found: phrases.filter(p => lower.includes(p.toLowerCase())), missing: phrases.filter(p => !lower.includes(p.toLowerCase())) };
+}
+
+function normDate(d) { return d.replace(/[年月]/g,'-').replace(/[日号]/g,'').replace(/\./g,'-').trim(); }
+
+function extractHeroKeywords(text) {
+  if (!text) return [];
+  const kws = [];
+  const pats = [/(?:英雄|角色|Hero|Champion)[:：\s]*([A-Za-z一-鿿]+)/gi, /(?:神器|Artifact|Relic)[:：\s]*([A-Za-z一-鿿]+)/gi, /(?:关卡|Stage|Level)[:：\s]*([A-Za-z0-9一-鿿\-]+)/gi];
+  for (const p of pats) { let m; while ((m = p.exec(text)) !== null) kws.push(m[1].trim()); }
+  if (kws.length === 0) {
+    const words = text.match(/[A-Z][a-z]{2,}|[一-鿿]{2,4}/g) || [];
+    return [...new Set(words)].slice(0, 10);
+  }
+  return [...new Set(kws)];
+}
+
+// ============================================================
+// Step navigation
+// ============================================================
+function updateStepUI() {
+  for (let i = 1; i <= 4; i++) {
+    const dot = document.getElementById('stepDot'+i);
+    const stepDiv = document.getElementById('step'+i);
+    dot.className = 'step-dot';
+    if (i < state.step) dot.classList.add('done');
+    if (i === state.step) dot.classList.add('active');
+    if (stepDiv) stepDiv.classList.toggle('hidden', i !== state.step);
+  }
+  for (let i = 1; i <= 3; i++) {
+    const line = document.getElementById('stepLine'+i);
+    if (line) line.className = 'step-line' + (i < state.step ? ' done' : '');
+  }
+  const labels = ['选择类别','上传素材','输入需求','查看结果'];
+  document.getElementById('stepLabel').textContent = labels[state.step-1];
+  document.getElementById('btnReset').classList.toggle('hidden', state.step === 1);
+}
+
+function goToStep(n) {
+  state.step = n;
+  updateStepUI();
+  if (n === 3) renderImageSummaryInStep3();
+}
+
+function resetAll() {
+  state = { step:1, categoryId:null, images:[], reqText:'', checkResults:null, ocrLoading:{} };
+  document.getElementById('fileInput').value = '';
+  document.getElementById('reqText').value = '';
+  document.getElementById('imageList').innerHTML = '';
+  document.getElementById('selectedCategoryInfo').classList.add('hidden');
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  updateStepUI();
+}
+
+// ============================================================
+// Category selection
+// ============================================================
+function selectCategory(catId) {
+  state.categoryId = catId;
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('selected', c.dataset.cat === catId));
+  const cat = CATEGORIES.find(c => c.id === catId);
+  const info = document.getElementById('selectedCategoryInfo');
+  info.classList.remove('hidden');
+  info.innerHTML = '<strong>已选择：' + cat.name + '</strong><br>将检查 ' + cat.checks.length + ' 项：' + cat.checks.map(c => c.label).join('、');
+  document.getElementById('step2Title').innerHTML = '上传待检查物料 <span style="font-size:13px;font-weight:400;color:#999;">(' + cat.name + ')</span>';
+
+  // Show image upload status
+  renderUploadStatus();
+  // Render any existing images
+  renderImageList();
+
+  goToStep(2);
+}
+
+// ============================================================
+// File handling
+// ============================================================
+function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0) return;
+
+  const statusEl = document.getElementById('uploadStatus');
+  statusEl.className = 'upload-status show success';
+  statusEl.textContent = '已选择 ' + files.length + ' 个文件，正在处理...';
+
+  const newImages = [];
+  let processed = 0;
+  const total = files.length;
+
+  files.forEach((file, fi) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      newImages.push({
+        file: file,
+        name: file.name,
+        preview: e.target.result,
+        lang: extractLang(file.name),
+        ocrText: '',
+        ocrLang: TESSERACT_LANG_MAP[extractLang(file.name)] || 'eng+chi_sim',
+        ocrEngine: '',
+        ocrPlan: ''
+      });
+      processed++;
+      if (processed === total) {
+        state.images = [...state.images, ...newImages];
+        statusEl.textContent = '成功上传 ' + state.images.length + ' 张图片！';
+        renderImageList();
+        // Clear file input so same file can be re-selected
+        document.getElementById('fileInput').value = '';
+      }
+    };
+    reader.onerror = function() {
+      processed++;
+      statusEl.className = 'upload-status show error';
+      statusEl.textContent = '文件读取失败：' + file.name;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderUploadStatus() {
+  const statusEl = document.getElementById('uploadStatus');
+  if (state.images.length === 0) {
+    statusEl.className = 'upload-status';
+    statusEl.textContent = '';
+  } else {
+    statusEl.className = 'upload-status show success';
+    statusEl.textContent = '已上传 ' + state.images.length + ' 张图片';
+  }
+}
+
+function renderImageList() {
+  const listEl = document.getElementById('imageList');
+  if (state.images.length === 0) {
+    listEl.innerHTML = '';
+    return;
+  }
+
+  const hasAnyOcrNeeded = state.images.some(img => !img.ocrText);
+  const isAnyLoading = Object.values(state.ocrLoading).some(Boolean);
+
+  listEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:13px;color:#666;">
+        已上传 <strong>${state.images.length}</strong> 张图片
+        <span style="font-size:12px;color:#999;">（点击「识别文字」提取内容）</span>
+      </div>
+      <button class="btn btn-ocr btn-sm" onclick="runAllOcr()" ${isAnyLoading ? 'disabled' : ''}>
+        &#127760; 全部识别
+      </button>
+    </div>
+    ${state.images.map((img, i) => `
+      <div class="image-item">
+        <img class="thumb" src="${img.preview}" alt="${img.name}">
+        <div class="info">
+          <div class="filename">${img.name}</div>
+          <div class="meta">
+            ${img.lang ? '<span class="lang-badge">'+img.lang+'</span>' : ''}
+            <select id="ocrLang${i}" onchange="state.images[${i}].ocrLang = this.value" style="font-size:11px;border:1px solid #ddd;border-radius:4px;padding:2px 4px;margin-right:4px;">
+              ${OCR_LANG_OPTIONS.map(o => '<option value="'+o.code+'"' + (img.ocrLang === o.code ? ' selected' : '') + '>'+o.label+'</option>').join('')}
+            </select>
+            ${state.ocrLoading[i] ? '<span style="color:#3b82f6;">&#9203; 识别中...</span>' : ''}
+            ${img.ocrEngine === '百度云OCR' ? '<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600;">百度云OCR</span>' : ''}
+            ${img.ocrEngine === 'DeepSeek' ? '<span style="display:inline-block;background:#ecfdf5;color:#059669;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600;" title="'+ (img.ocrPlan || 'DeepSeek') +'">'+ (img.ocrPlan || 'DeepSeek') +'</span>' : ''}
+            ${img.ocrEngine === 'Tesseract' ? '<span style="display:inline-block;background:#fffbeb;color:#b45309;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600;">Tesseract</span>' : ''}
+          </div>
+          <textarea
+            id="ocrText${i}"
+            placeholder="${img.ocrText ? '' : '点击下方「识别文字」自动提取，也可手动粘贴...'}"
+            oninput="updateOcrText(${i}, this.value)"
+          >${img.ocrText || ''}</textarea>
+          <div class="btn-row" style="margin-top:6px;">
+            ${(getProviderType() === 'baidu' && getBaiduApiKey() && getBaiduSecretKey()) ? `
+              <button class="btn btn-sm" style="background:#3b82f6;color:#fff;border-color:#2563eb;" id="ocrBtn${i}" onclick="runOcr(${i})" ${state.ocrLoading[i] ? 'disabled' : ''}>
+                ${state.ocrLoading[i] ? '<span class="spinner"></span>' : '&#9729;'} 百度OCR识别
+              </button>
+              <button class="btn btn-sm btn-ocr" onclick="runTesseractOcr(${i})">&#128269; Tesseract</button>
+            ` : (getApiKey() && getProviderConfig()) ? `
+              <button class="btn btn-sm" style="background:#10b981;color:#fff;border-color:#059669;" id="ocrBtn${i}" onclick="runOcr(${i})" ${state.ocrLoading[i] ? 'disabled' : ''}>
+                ${state.ocrLoading[i] ? '<span class="spinner"></span>' : '&#129302;'} AI 识别
+              </button>
+              <button class="btn btn-sm btn-ocr" onclick="runTesseractOcr(${i})">&#128269; Tesseract</button>
+            ` : `
+              <button class="btn btn-ocr btn-sm" id="ocrBtn${i}" onclick="runTesseractOcr(${i})" ${state.ocrLoading[i] ? 'disabled' : ''}>
+                ${state.ocrLoading[i] ? '<span class="spinner"></span>' : '&#128269;'} Tesseract 识别
+              </button>
+            `}
+            <button class="btn btn-danger btn-sm" onclick="removeImage(${i})">&#10005; 删除</button>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function updateOcrText(index, text) {
+  if (state.images[index]) state.images[index].ocrText = text;
+}
+
+function removeImage(index) {
+  state.images.splice(index, 1);
+  delete state.ocrLoading[index];
+  // Re-index ocrLoading
+  const newLoading = {};
+  Object.keys(state.ocrLoading).forEach(k => {
+    const ki = parseInt(k);
+    if (ki > index) newLoading[ki-1] = state.ocrLoading[ki];
+    else if (ki < index) newLoading[ki] = state.ocrLoading[ki];
+  });
+  state.ocrLoading = newLoading;
+  document.getElementById('fileInput').value = '';
+  renderImageList();
+  renderUploadStatus();
+}
+
+// ============================================================
+// OCR
+// ============================================================
+// Preprocess image: draw to canvas, convert to grayscale, enhance contrast
+function preprocessImage(dataUrl) {
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      var ctx = canvas.getContext('2d');
+      // Draw original
+      ctx.drawImage(img, 0, 0);
+      // Get image data
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var data = imageData.data;
+      // Convert to grayscale and increase contrast
+      for (var i = 0; i < data.length; i += 4) {
+        // Grayscale: weighted average
+        var gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        // Contrast enhancement - stretch the range
+        gray = ((gray - 128) * 1.8) + 128;
+        // Clamp
+        gray = Math.max(0, Math.min(255, gray));
+        data[i] = gray;     // R
+        data[i + 1] = gray; // G
+        data[i + 2] = gray; // B
+        // Alpha stays the same
+      }
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas);
+    };
+    img.onerror = function() { reject(new Error('Image load failed')); };
+    img.src = dataUrl;
+  });
+}
+
+// Cache workers by language to avoid re-downloading language data
+var ocrWorkers = {};
+
+async function getWorker(lang) {
+  if (ocrWorkers[lang]) return ocrWorkers[lang];
+  var worker = await Tesseract.createWorker(lang, 1, {
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0',
+  });
+  ocrWorkers[lang] = worker;
+  return worker;
+}
+
+async function runOcr(index) {
+  var img = state.images[index];
+  if (!img) return;
+
+  // Read the current language selection from DOM
+  var langSel = document.getElementById('ocrLang'+index);
+  if (langSel) state.images[index].ocrLang = langSel.value;
+  var ocrLang = state.images[index].ocrLang || 'eng+chi_sim';
+
+  state.ocrLoading[index] = true;
+  renderImageList();
+
+  var text = '';
+  var engine = '';
+
+  // ---- Pipeline ----
+  var rawText = '';
+  var plan = '';
+
+  if (getProviderType() === 'baidu') {
+    try {
+      text = await baiduOcr(img.preview, ocrLang);
+      engine = '百度云OCR';
+      plan = 'accurate_basic';
+    } catch (err) {
+      console.error('百度OCR failed:', err.message);
+      state.images[index].ocrText = '[百度OCR识别失败]\n错误: ' + (err.message || 'Unknown') + '\n\n请点击「Tesseract」按钮获取本地结果，或手动粘贴。';
+      state.images[index].ocrEngine = '失败';
+      state.images[index].ocrPlan = '';
+      state.ocrLoading[index] = false;
+      renderImageList();
+      var taErrB = document.getElementById('ocrText'+index);
+      if (taErrB) taErrB.value = state.images[index].ocrText || '';
+      return;
+    }
+  } else {
+    var apiKey = getApiKey();
+    var provCfg = getProviderConfig();
+    if (apiKey && provCfg) {
+      try {
+      // Plan A: Provider has vision → send image directly
+      if (provCfg.vision) {
+        var langMap = { 'rus': '俄语', 'deu': '德语', 'fra': '法语', 'eng': '英语', 'chi_sim': '中文' };
+        var langName = langMap[ocrLang] || '';
+        var visionPrompt = 'Extract ALL text from this image exactly as it appears. Preserve original language, formatting, line breaks. Output ONLY the extracted text, nothing else.' + (langName ? ' Language: ' + langName + '.' : '');
+
+        if (provCfg.format === 'anthropic') {
+          var base64data = img.preview.split(',')[1];
+          var antResp = await fetch(provCfg.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+              model: provCfg.model,
+              max_tokens: 4096,
+              messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64data } },
+                { type: 'text', text: visionPrompt }
+              ]}]
+            }),
+          });
+          if (!antResp.ok) throw new Error('Anthropic 返回 ' + antResp.status);
+          var antData = await antResp.json();
+          text = antData.content[0].text.trim();
+        } else {
+          // OpenAI-compatible format
+          var visResp = await fetch(provCfg.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+            body: JSON.stringify({
+              model: provCfg.model,
+              messages: [{ role: 'user', content: [
+                { type: 'image_url', image_url: { url: img.preview } },
+                { type: 'text', text: visionPrompt }
+              ]}],
+              max_tokens: 4096, temperature: 0,
+            }),
+          });
+          if (!visResp.ok) {
+            var ve = await visResp.text().catch(function(){ return ''; });
+            throw new Error(provCfg.name + ' 返回 ' + visResp.status + ': ' + ve.slice(0, 100));
+          }
+          var visData = await visResp.json();
+          text = visData.choices[0].message.content.trim();
+        }
+        engine = provCfg.name;
+        plan = provCfg.model;
+      }
+
+      // Plan B: No vision → Tesseract + text cleanup via provider's text model
+      if (!text) {
+        if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js 未加载');
+        var processedCanvas = await preprocessImage(img.preview);
+        var worker = await getWorker(ocrLang);
+        var tesseractResult = await worker.recognize(processedCanvas);
+        rawText = tesseractResult.data.text || '';
+        if (!rawText.trim()) throw new Error('Tesseract 未提取到文字');
+
+        var cleanupResult = await textCleanupViaProvider(rawText, ocrLang, img.name, provCfg);
+        text = cleanupResult.text;
+        engine = provCfg.name;
+        plan = 'Tesseract→' + provCfg.model;
+      }
+    } catch (err) {
+      console.error('OCR pipeline failed:', err.message);
+      state.images[index].ocrText = '[识别失败]\n' +
+        (provCfg.vision ? '视觉直调: ' + provCfg.name + '/' + provCfg.model + '\n' : '') +
+        'Tesseract原始: ' + (rawText ? rawText.slice(0, 300) : '(无)') + '\n' +
+        '错误: ' + (err.message || 'Unknown') + '\n\n' +
+        '请点击「Tesseract」按钮获取纯本地结果，或手动粘贴。';
+      state.images[index].ocrEngine = '失败';
+      state.ocrLoading[index] = false;
+      renderImageList();
+      var taErr = document.getElementById('ocrText'+index);
+      if (taErr) taErr.value = state.images[index].ocrText || '';
+      return;
+    }
+  }
+  }
+
+  // If we get here without text, show message
+  if (!text) {
+    state.images[index].ocrText = '[未识别]\n请点击识别按钮提取文字。';
+    state.images[index].ocrEngine = '';
+    state.images[index].ocrPlan = '';
+  } else {
+    state.images[index].ocrText = text;
+    state.images[index].ocrEngine = engine;
+    state.images[index].ocrPlan = plan || engine;
+  }
+
+  state.ocrLoading[index] = false;
+  renderImageList();
+  var ta = document.getElementById('ocrText'+index);
+  if (ta) ta.value = state.images[index].ocrText || '';
+}
+
+// Direct Tesseract OCR (bypasses DeepSeek)
+async function runTesseractOcr(index) {
+  var img = state.images[index];
+  if (!img) return;
+
+  if (typeof Tesseract === 'undefined') {
+    alert('Tesseract.js 尚未加载完成，请稍后再试。或使用 DeepSeek 识别。');
+    return;
+  }
+
+  var langSel = document.getElementById('ocrLang'+index);
+  if (langSel) state.images[index].ocrLang = langSel.value;
+  var ocrLang = state.images[index].ocrLang || 'eng+chi_sim';
+
+  state.ocrLoading[index] = true;
+  renderImageList();
+
+  try {
+    var processedCanvas = await preprocessImage(img.preview);
+    var worker = await getWorker(ocrLang);
+    var result = await worker.recognize(processedCanvas);
+    var text = result.data.text || '';
+    var alphaChars = (text.match(/[a-zA-Zа-яА-ЯёЁ一-鿿0-9]/g) || []).length;
+    var totalChars = text.replace(/\s/g, '').length;
+    if (totalChars > 20 && alphaChars / totalChars < 0.3) {
+      text = '[Tesseract识别质量不佳]\n' + text;
+    }
+    state.images[index].ocrText = text;
+    state.images[index].ocrEngine = 'Tesseract';
+  } catch (err) {
+    state.images[index].ocrText = '[Tesseract失败: ' + (err.message || 'Unknown') + ']';
+    state.images[index].ocrEngine = 'Tesseract失败';
+  }
+
+  state.ocrLoading[index] = false;
+  renderImageList();
+  var ta = document.getElementById('ocrText'+index);
+  if (ta) ta.value = state.images[index].ocrText || '';
+}
+
+async function runAllOcr() {
+  var isBaiduReady = getProviderType() === 'baidu' && getBaiduApiKey() && getBaiduSecretKey();
+  var isGenericReady = getApiKey() && getProviderConfig();
+  if (typeof Tesseract === 'undefined' && !isBaiduReady && !isGenericReady) {
+    alert('请先在顶栏配置百度云API密钥并点击「连接测试」，或输入 AI API Key 完成配置，或等待 Tesseract.js 加载完成后使用。');
+    return;
+  }
+  for (var i = 0; i < state.images.length; i++) {
+    if (!state.images[i].ocrText || state.images[i].ocrText.indexOf('OCR') === 0 || state.images[i].ocrText.indexOf('识别失败') === 0 || state.images[i].ocrText.indexOf('识别质量') >= 0 || state.images[i].ocrText.indexOf('需配置') >= 0) {
+      await runOcr(i);
+    }
+  }
+}
+
+// ============================================================
+// Step 3 helpers
+// ============================================================
+function renderImageSummaryInStep3() {
+  // Just make sure the requirement textarea is up to date
+  document.getElementById('reqText').value = state.reqText;
+}
+
+// ============================================================
+// Check execution
+// ============================================================
+async function startCheck() {
+  const cat = CATEGORIES.find(c => c.id === state.categoryId);
+  if (!cat) return alert('请先选择物料类别');
+
+  state.reqText = document.getElementById('reqText').value;
+  if (!state.reqText.trim()) return alert('请输入需求文本');
+
+  // Update OCR text from any textareas still in DOM
+  for (let i = 0; i < state.images.length; i++) {
+    const ta = document.getElementById('ocrText'+i);
+    if (ta && state.images[i]) state.images[i].ocrText = ta.value;
+  }
+
+  const allOcr = state.images.map(img => img.ocrText || '').join('\n---\n');
+  const req = state.reqText;
+  const ocrDates = extractDates(allOcr);
+  const reqDates = extractDates(req);
+  const ocrCDKs = extractCDKs(allOcr);
+  const reqCDKs = extractCDKs(req);
+
+  state.checkResults = {};
+
+  for (const check of cat.checks) {
+    let status = 'pending', detail = '';
+
+    switch (check.id) {
+      case 'en_accurate': {
+        const enImgs = state.images.filter(img => img.lang === 'EN');
+        if (enImgs.length === 0) {
+          status = 'warn'; detail = '未检测到EN语言标识的图片，请确认是否已上传英文版本';
+        } else {
+          const sims = enImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.3 ? 'pass' : avg > 0.1 ? 'warn' : 'fail';
+          detail = 'EN图片文字匹配度: ' + Math.round(avg * 100) + '%。匹配度较低时请人工核实。';
+        }
+        break;
+      }
+      case 'ru_accurate': {
+        const ruImgs = state.images.filter(img => img.lang === 'RU');
+        if (ruImgs.length === 0) {
+          status = 'warn'; detail = '未检测到RU语言标识的图片，请确认是否已上传俄文版本';
+        } else {
+          const sims = ruImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.2 ? 'pass' : avg > 0.05 ? 'warn' : 'fail';
+          detail = 'RU图片文字匹配度: ' + Math.round(avg * 100) + '%。俄文OCR准确率较低，建议人工核实。';
+        }
+        break;
+      }
+      case 'hero_accurate': {
+        const kws = extractHeroKeywords(req);
+        const { found, missing } = findPhrases(allOcr, kws);
+        if (missing.length === 0 && found.length > 0) {
+          status = 'pass'; detail = '已匹配关键词: ' + found.join('、');
+        } else if (found.length > 0) {
+          status = 'warn'; detail = '已匹配: ' + found.join('、') + '；未找到: ' + missing.join('、');
+        } else {
+          status = 'warn'; detail = '未能从图片中识别到相关关键词，请人工核实。';
+        }
+        break;
+      }
+      case 'author_accurate': {
+        const re = /(?:提供|作者|攻略|Author|Guide\s*by|Created\s*by)[:：]?\s*([A-Za-z一-鿿0-9_\-]+)/gi;
+        const ra = [], oa = []; let m;
+        while ((m = re.exec(req)) !== null) ra.push(m[1].trim());
+        while ((m = re.exec(allOcr)) !== null) oa.push(m[1].trim());
+        if (ra.length === 0) {
+          status = 'warn'; detail = '需求文本中未检测到作者姓名信息，请人工确认。';
+        } else if (oa.some(a => ra.some(r => r.includes(a) || a.includes(r)))) {
+          status = 'pass'; detail = '需求作者: ' + ra.join('、') + '；图片中检测到匹配。';
+        } else {
+          status = 'warn'; detail = '需求作者: ' + ra.join('、') + '；图片中未明确匹配，请核实。';
+        }
+        break;
+      }
+      case 'cdk_image_match': {
+        if (reqCDKs.length === 0) {
+          status = 'warn'; detail = '需求文本中未检测到CDK码，请手动输入。';
+        } else if (ocrCDKs.length === 0) {
+          status = 'fail'; detail = '图片中未检测到CDK码。请检查图片或手动编辑OCR结果。';
+        } else {
+          const matched = ocrCDKs.filter(oc => reqCDKs.some(rc => rc.toUpperCase() === oc.toUpperCase()));
+          if (matched.length === reqCDKs.length) {
+            status = 'pass'; detail = 'CDK匹配成功: ' + matched.join('、');
+          } else if (matched.length > 0) {
+            status = 'warn'; detail = '部分匹配: ' + matched.join('、') + '。图片: ' + ocrCDKs.join('、') + '；需求: ' + reqCDKs.join('、');
+          } else {
+            status = 'fail'; detail = 'CDK不匹配！图片: ' + ocrCDKs.join('、') + '；需求: ' + reqCDKs.join('、');
+          }
+        }
+        break;
+      }
+      case 'cdk_redeem':
+        status = 'manual'; detail = 'CDK兑换验证需要实际操作游戏内兑换入口确认。';
+        break;
+      case 'cdk_validity': {
+        if (ocrDates.length === 0 && reqDates.length === 0) {
+          status = 'warn'; detail = '未能检测到日期信息。';
+        } else if (reqDates.length === 0) {
+          status = 'warn'; detail = '图片日期: ' + ocrDates.join('、') + '，需求中未发现日期。';
+        } else if (ocrDates.length === 0) {
+          status = 'fail'; detail = '需求日期: ' + reqDates.join('、') + '，图片中未检测到日期。';
+        } else {
+          const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
+          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
+          status = match ? 'pass' : 'fail';
+          detail = match ? '日期一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '日期不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
+        }
+        break;
+      }
+      case 'time_accurate': {
+        if (ocrDates.length === 0) {
+          status = 'fail'; detail = '图片中未检测到时间信息，请检查清晰度或手动编辑OCR结果。';
+        } else if (reqDates.length === 0) {
+          status = 'warn'; detail = '图片: ' + ocrDates.join('、') + '，需求中未发现日期。';
+        } else {
+          const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
+          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
+          status = match ? 'pass' : 'fail';
+          detail = match ? '时间一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '时间不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
+        }
+        break;
+      }
+      case 'en_correct': {
+        const enImgs = state.images.filter(img => img.lang === 'EN');
+        if (enImgs.length === 0) { status = 'warn'; detail = '未检测到EN语言标识的图片。'; }
+        else {
+          const sims = enImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.3 ? 'pass' : avg > 0.1 ? 'warn' : 'fail';
+          detail = 'EN公告图片匹配度: ' + Math.round(avg * 100) + '%。';
+        }
+        break;
+      }
+      case 'ru_correct': {
+        const ruImgs = state.images.filter(img => img.lang === 'RU');
+        if (ruImgs.length === 0) { status = 'warn'; detail = '未检测到RU语言标识的图片。'; }
+        else {
+          const sims = ruImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.2 ? 'pass' : avg > 0.05 ? 'warn' : 'fail';
+          detail = 'RU公告图片匹配度: ' + Math.round(avg * 100) + '%。';
+        }
+        break;
+      }
+      case 'text_correct': {
+        if (!allOcr.trim()) { status = 'warn'; detail = '图片OCR结果为空，请先识别文字。'; }
+        else {
+          const sim = calcSimilarity(allOcr, req);
+          if (sim > 0.4) status = 'pass';
+          else if (sim > 0.15) status = 'warn';
+          else status = 'fail';
+          detail = '图片文案匹配度: ' + Math.round(sim * 100) + '%。匹配度低时请人工逐句核对。';
+        }
+        break;
+      }
+      case 'lang_filename': {
+        const required = ['EN','RU','DE','FR'];
+        const imgLangs = state.images.map(img => img.lang).filter(Boolean);
+        const missingL = required.filter(l => !imgLangs.includes(l));
+        const extraL = imgLangs.filter(l => !required.includes(l));
+        if (missingL.length === 0 && extraL.length === 0) {
+          status = 'pass'; detail = '四语文件齐全: ' + imgLangs.join('、') + '，均与文件名一致。';
+        } else if (missingL.length > 0) {
+          status = 'fail'; detail = '缺少语种: ' + missingL.join('、') + '。已检测: ' + (imgLangs.join('、') || '无');
+        } else {
+          status = 'warn'; detail = '多出语种: ' + extraL.join('、') + '。已检测: ' + imgLangs.join('、');
+        }
+        break;
+      }
+      case 'platform_match':
+        status = 'manual'; detail = '请人工检查图片中跳转链接/二维码指向的平台是否与需求一致。';
+        break;
+      case 'reward_icon_match':
+        status = 'manual'; detail = '请人工比对奖励图标是否与需求文档中描述一致。';
+        break;
+      case 'reward_icon_bg':
+        status = 'manual'; detail = '请人工确认奖励图标背景颜色是否统一。';
+        break;
+    }
+
+    state.checkResults[check.id] = { status, detail };
+  }
+
+  goToStep(4);
+  renderResults(cat);
+}
+
+// ============================================================
+// Results rendering
+// ============================================================
+function renderResults(cat) {
+  const results = state.checkResults;
+  let pass = 0, fail = 0, warn = 0, manual = 0;
+  for (const c of cat.checks) {
+    const s = results[c.id]?.status;
+    if (s === 'pass') pass++;
+    else if (s === 'fail') fail++;
+    else if (s === 'warn') warn++;
+    else if (s === 'manual') manual++;
+  }
+
+  // Summary
+  document.getElementById('resultSummary').innerHTML = `
+    <div class="result-card pass"><div class="count">${pass}</div><div class="label">通过</div></div>
+    <div class="result-card fail"><div class="count">${fail}</div><div class="label">未通过</div></div>
+    <div class="result-card warn"><div class="count">${warn}</div><div class="label">需确认</div></div>
+    <div class="result-card manual"><div class="count">${manual}</div><div class="label">人工核实</div></div>
+  `;
+
+  // Check items
+  const icons = { pass: '&#10004;', fail: '&#10008;', warn: '&#9888;', manual: '&#128065;', pending: '&#9203;' };
+  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实', pending: '待检查' };
+  document.getElementById('checkItems').innerHTML = cat.checks.map(c => {
+    const r = results[c.id] || { status:'pending', detail:'' };
+    return `
+      <div class="check-item ${r.status}">
+        <div class="status-icon">${icons[r.status]}</div>
+        <div class="check-body">
+          <div class="check-label">${c.label}</div>
+          <div class="check-desc">${c.desc}</div>
+          ${r.detail ? '<div class="check-detail">'+r.detail+'</div>' : ''}
+        </div>
+        <span class="status-badge">${labels[r.status]}</span>
+      </div>
+    `;
+  }).join('');
+
+  // Verdict
+  const vEl = document.getElementById('verdict');
+  if (fail > 0) {
+    vEl.className = 'verdict fail';
+    vEl.innerHTML = '&#10008; 发现 ' + fail + ' 项未通过，请修正后重新检查';
+  } else if (warn > 0 || manual > 0) {
+    vEl.className = 'verdict warn';
+    vEl.innerHTML = '&#9888; 自动检查项已通过，还有 ' + (warn + manual) + ' 项需要人工确认';
+  } else {
+    vEl.className = 'verdict pass';
+    vEl.innerHTML = '&#10004; 所有检查项均已通过！';
+  }
+}
+
+// ============================================================
+// Export
+// ============================================================
+function exportReport() {
+  const cat = CATEGORIES.find(c => c.id === state.categoryId);
+  if (!cat || !state.checkResults) return;
+
+  const results = state.checkResults;
+  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实' };
+
+  let text = '物料质量检查报告\n';
+  text += '类别: ' + cat.name + '\n';
+  text += '检查时间: ' + new Date().toLocaleString() + '\n';
+  text += '上传图片: ' + state.images.length + ' 张\n';
+  text += '---\n';
+  for (const c of cat.checks) {
+    const r = results[c.id] || { status:'pending', detail:'' };
+    const icon = r.status === 'pass' ? '[通过]' : r.status === 'fail' ? '[未通过]' : r.status === 'warn' ? '[需确认]' : r.status === 'manual' ? '[人工]' : '[待查]';
+    text += icon + ' ' + c.label + '\n';
+    if (r.detail) text += '  详情: ' + r.detail + '\n';
+  }
+
+  const blob = new Blob([text], { type:'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'QA检查报告_' + cat.id + '_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+
+// ============================================================
+// Start
+// ============================================================
+init();
+updateStepUI();
+</script>
+</body>
+</html>
