@@ -147,6 +147,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 
 .section-nav { display: flex; gap: 8px; }
 .hidden { display: none !important; }
+
+/* Diff comparison view */
+.diff-toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.diff-container { display: flex; gap: 16px; margin-top: 16px; }
+.diff-panel { flex: 1; min-width: 0; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; }
+.diff-panel-header { background: #f8f9fa; padding: 10px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+.diff-panel-header .diff-stats { font-size: 11px; font-weight: 400; color: #888; }
+.diff-panel-body { padding: 14px; font-size: 13px; line-height: 1.8; max-height: 420px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; }
+.diff-hl-added { background: #d1fae5; border-radius: 2px; padding: 0 1px; }
+.diff-hl-missing { background: #fee2e2; border-radius: 2px; padding: 0 1px; text-decoration: line-through; }
+.diff-hl-match { background: transparent; }
+.diff-match-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 12px; }
+.diff-match-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+.diff-empty { color: #aaa; font-style: italic; }
 </style>
 </head>
 <body>
@@ -227,7 +241,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
         <button class="btn btn-outline btn-sm" onclick="goToStep(2)">返回上一步</button>
       </div>
       <p style="font-size:13px;color:#888;margin-bottom:10px;">请粘贴或输入对应物料的需求文本（活动名称、时间、CDK码、作者等信息）</p>
-      <textarea class="req-textarea" id="reqText" placeholder="例如：&#10;活动名称：XXX&#10;活动时间：2024/01/15 - 2024/01/30&#10;兑换码：ABCD-1234-EFGH&#10;作者：张三&#10;..."></textarea>
+      <textarea class="req-textarea" id="reqText" placeholder="例如：&#10;活动名称：XXX&#10;活动时间：2024/01/15 - 2024/01/30&#10;兑换码：ABCD-1234-EFGH&#10;作者：张三&#10;..." oninput="scheduleDiffRefresh()"></textarea>
+      <div class="diff-toggle-row">
+        <button class="btn btn-outline btn-sm" id="btnToggleDiff" onclick="toggleDiffView()">
+          &#128065; 查看OCR对照
+        </button>
+        <span id="diffRefreshHint" style="font-size:11px;color:#999;"></span>
+      </div>
+      <div class="diff-container hidden" id="diffContainer">
+        <div class="diff-panel">
+          <div class="diff-panel-header">&#128269; OCR识别结果 <span class="diff-stats" id="diffOcrStats"></span></div>
+          <div class="diff-panel-body" id="diffOcr"></div>
+        </div>
+        <div class="diff-panel">
+          <div class="diff-panel-header">&#128221; 需求文本 <span class="diff-stats" id="diffReqStats"></span></div>
+          <div class="diff-panel-body" id="diffReq"></div>
+        </div>
+      </div>
+      <div class="diff-match-bar hidden" id="diffMatchBar">
+        <div class="diff-match-bar-fill" id="diffMatchBarFill"></div>
+      </div>
       <div style="margin-top:14px;">
         <button class="btn btn-primary" id="btnStartCheck" onclick="startCheck()" style="width:100%;justify-content:center;padding:12px;">
           &#128270; 开始检查
@@ -1463,6 +1496,153 @@ async function runAllOcr() {
 function renderImageSummaryInStep3() {
   // Just make sure the requirement textarea is up to date
   document.getElementById('reqText').value = state.reqText;
+  // Refresh diff if visible
+  if (!document.getElementById('diffContainer').classList.contains('hidden')) {
+    renderDiffView();
+  }
+}
+
+// ============================================================
+// Diff / Comparison View
+// ============================================================
+var _diffTimer = null;
+
+function scheduleDiffRefresh() {
+  if (_diffTimer) clearTimeout(_diffTimer);
+  _diffTimer = setTimeout(function() {
+    if (!document.getElementById('diffContainer').classList.contains('hidden')) {
+      renderDiffView();
+    }
+  }, 600);
+}
+
+function toggleDiffView() {
+  var container = document.getElementById('diffContainer');
+  var bar = document.getElementById('diffMatchBar');
+  var btn = document.getElementById('btnToggleDiff');
+  var isHidden = container.classList.contains('hidden');
+
+  if (isHidden) {
+    container.classList.remove('hidden');
+    bar.classList.remove('hidden');
+    btn.innerHTML = '&#128065; 隐藏OCR对照';
+    // Update reqText from textarea
+    state.reqText = document.getElementById('reqText').value;
+    renderDiffView();
+    // Scroll into view
+    container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    container.classList.add('hidden');
+    bar.classList.add('hidden');
+    btn.innerHTML = '&#128065; 查看OCR对照';
+  }
+}
+
+function renderDiffView() {
+  var ocrParts = [];
+  for (var i = 0; i < state.images.length; i++) {
+    var img = state.images[i];
+    if (img.ocrText) {
+      ocrParts.push('--- ' + img.name + ' (' + (img.lang || '?') + ') ---\n' + img.ocrText);
+    }
+  }
+  var ocrText = ocrParts.join('\n\n');
+
+  var reqText = document.getElementById('reqText').value;
+  state.reqText = reqText;
+
+  // Build word sets for highlighting
+  var getWords = function(text) {
+    var cleaned = text.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9\.\/\-:]+/g, ' ').replace(/\s+/g, ' ').trim();
+    var words = cleaned.split(' ');
+    var result = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i].replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
+      if (w.length >= 2) result.push(w);
+    }
+    return new Set(result);
+  };
+
+  var ocrWords = getWords(ocrText);
+  var reqWords = getWords(reqText);
+
+  // Calculate match stats
+  var allWords = new Set();
+  ocrWords.forEach(function(w) { allWords.add(w); });
+  reqWords.forEach(function(w) { allWords.add(w); });
+
+  var matchCount = 0;
+  allWords.forEach(function(w) {
+    if (ocrWords.has(w) && reqWords.has(w)) matchCount++;
+  });
+  var totalUnique = allWords.size;
+  var matchRate = totalUnique > 0 ? Math.round(matchCount / totalUnique * 100) : 0;
+
+  // Update match bar
+  var barFill = document.getElementById('diffMatchBarFill');
+  if (matchRate >= 70) barFill.style.background = '#16a34a';
+  else if (matchRate >= 40) barFill.style.background = '#d97706';
+  else barFill.style.background = '#dc2626';
+  barFill.style.width = matchRate + '%';
+
+  // Build highlighted OCR text
+  var ocrLines = ocrText.split('\n');
+  var ocrHtml = '';
+  for (var li = 0; li < ocrLines.length; li++) {
+    var line = ocrLines[li];
+    if (!line.trim()) { ocrHtml += '\n'; continue; }
+    // Tokenize line into words + non-words
+    var tokens = line.match(/([\wЀ-ӿ一-鿿0-9\.\/\-:]+|[^\wЀ-ӿ一-鿿0-9\.\/\-:]+)/g) || [line];
+    for (var ti = 0; ti < tokens.length; ti++) {
+      var token = tokens[ti];
+      var clean = token.toLowerCase().replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
+      if (/^[\wЀ-ӿ一-鿿0-9\.\/\-:]+$/.test(token) && clean.length >= 2) {
+        if (reqWords.has(clean)) {
+          ocrHtml += '<span class="diff-hl-match">' + escHtml(token) + '</span>';
+        } else {
+          ocrHtml += '<span class="diff-hl-added">' + escHtml(token) + '</span>';
+        }
+      } else {
+        ocrHtml += escHtml(token);
+      }
+    }
+    ocrHtml += '\n';
+  }
+  document.getElementById('diffOcr').innerHTML = ocrHtml || '<span class="diff-empty">暂无OCR结果，请先在上一步识别图片文字</span>';
+
+  // Build highlighted Requirement text
+  var reqLines = reqText.split('\n');
+  var reqHtml = '';
+  for (var rli = 0; rli < reqLines.length; rli++) {
+    var rline = reqLines[rli];
+    if (!rline.trim()) { reqHtml += '\n'; continue; }
+    var rtokens = rline.match(/([\wЀ-ӿ一-鿿0-9\.\/\-:]+|[^\wЀ-ӿ一-鿿0-9\.\/\-:]+)/g) || [rline];
+    for (var rti = 0; rti < rtokens.length; rti++) {
+      var rtoken = rtokens[rti];
+      var rclean = rtoken.toLowerCase().replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
+      if (/^[\wЀ-ӿ一-鿿0-9\.\/\-:]+$/.test(rtoken) && rclean.length >= 2) {
+        if (ocrWords.has(rclean)) {
+          reqHtml += '<span class="diff-hl-match">' + escHtml(rtoken) + '</span>';
+        } else {
+          reqHtml += '<span class="diff-hl-missing">' + escHtml(rtoken) + '</span>';
+        }
+      } else {
+        reqHtml += escHtml(rtoken);
+      }
+    }
+    reqHtml += '\n';
+  }
+  document.getElementById('diffReq').innerHTML = reqHtml || '<span class="diff-empty">请输入需求文本</span>';
+
+  // Stats
+  document.getElementById('diffOcrStats').textContent = '共 ' + ocrWords.size + ' 个有效词';
+  document.getElementById('diffReqStats').textContent = '共 ' + reqWords.size + ' 个有效词';
+  var hint = document.getElementById('diffRefreshHint');
+  hint.textContent = '匹配度 ' + matchRate + '% | 编辑需求文本后自动刷新';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ============================================================
