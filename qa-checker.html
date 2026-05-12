@@ -2316,4 +2316,28 @@ function exportReport() {
 
   let text = '物料质量检查报告\n';
   text += '类别: ' + cat.name + '\n';
-  text
+  text += '检查时间: ' + new Date().toLocaleString() + '\n';
+  text += '上传图片: ' + state.images.length + ' 张\n';
+  text += '---\n';
+  for (const c of cat.checks) {
+    const r = results[c.id] || { status:'pending', detail:'' };
+    const icon = r.status === 'pass' ? '[通过]' : r.status === 'fail' ? '[未通过]' : r.status === 'warn' ? '[需确认]' : r.status === 'manual' ? '[人工]' : '[待查]';
+    text += icon + ' ' + c.label + '\n';
+    if (r.detail) text += '  详情: ' + r.detail + '\n';
+  }
+
+  const blob = new Blob([text], { type:'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'QA检查报告_' + cat.id + '_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+
+// ============================================================
+// Start
+// ============================================================
+init();
+updateStepUI();
+</script>
+</body>
+</html>
