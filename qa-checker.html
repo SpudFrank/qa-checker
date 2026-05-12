@@ -1599,10 +1599,24 @@ function renderDiffView() {
     reqLines.push({ text: rawReqLines[k], lineIdx: k, key: 'r_' + k });
   }
 
+  // Cyrillic-lookalike normalization for accurate word comparison
+  function normalizeCyrillic(s) {
+    var map = {
+      'А':'A','В':'B','Е':'E','К':'K','М':'M',
+      'Н':'H','О':'O','Р':'P','С':'C','Т':'T',
+      'У':'Y','Х':'X','а':'a','в':'b','е':'e',
+      'к':'k','м':'m','н':'h','о':'o','р':'p',
+      'с':'c','т':'t','у':'y','х':'x','і':'i',
+      'І':'I','Ј':'J','ј':'j'
+    };
+    return s.replace(/[А-ј]/g, function(ch) { return map[ch] || ch; });
+  }
+
   // Word-level similarity helper
   function wordSim(a, b) {
     var getWords = function(t) {
-      var cleaned = t.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      var norm = normalizeCyrillic(t);
+      var cleaned = norm.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
       var wrds = cleaned.split(' ').filter(function(w) { return w.length >= 2; });
       return new Set(wrds);
     };
@@ -1785,7 +1799,8 @@ function renderDiffView() {
 
   // Word-level stats
   var getWordsFn = function(text) {
-    var cleaned = text.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+    var norm = normalizeCyrillic(text);
+    var cleaned = norm.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
     return new Set(cleaned.split(' ').filter(function(w) { return w.length >= 2; }));
   };
   var ow = getWordsFn(activeOcrText), rw = getWordsFn(activeReqText);
