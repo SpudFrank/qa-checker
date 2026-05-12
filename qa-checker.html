@@ -180,6 +180,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .diff-ignore-btn { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid #ddd; background: #fff; color: #999; cursor: pointer; white-space: nowrap; }
 .diff-ignore-btn:hover { border-color: #f59e0b; color: #d97706; background: #fffbeb; }
 .diff-row.ignored .diff-ignore-btn { border-color: #f59e0b; color: #d97706; background: #fffbeb; }
+.diff-cell-ocr .w-extra { background: #d1fae5; border-radius: 2px; padding: 0 1px; }
+.diff-cell-req .w-miss { background: #fee2e2; border-radius: 2px; padding: 0 1px; text-decoration: line-through; }
+.diff-cell-ocr .w-near { background: #fef3c7; border-radius: 2px; padding: 0 1px; }
+.diff-cell-req .w-near { background: #fef3c7; border-radius: 2px; padding: 0 1px; }
 .diff-empty { color: #aaa; font-style: italic; padding: 24px; text-align: center; }
 .diff-reasons { padding: 14px 16px; border-top: 1px solid #e0e0e0; background: #fafafa; font-size: 13px; color: #555; line-height: 1.8; }
 .diff-reasons strong { color: #333; }
@@ -196,7 +200,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
   <div class="header-inner">
     <div>
       <h1>&#128269; 物料质量检查系统</h1>
-      <div class="subtitle">上传美术物料和需求文本，自动检查内容一致性 <span style="color:#aaa;font-size:11px;">v1.2</span></div>
+      <div class="subtitle">上传美术物料和需求文本，自动检查内容一致性 <span style="color:#aaa;font-size:11px;">v1.3</span></div>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <div style="display:flex;align-items:center;gap:6px;font-size:12px;" id="apiConfigArea">
@@ -326,10 +330,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 // ============================================================
 // Config
 // ============================================================
-var APP_VERSION = '1.2';
+var APP_VERSION = '1.3';
 // v1.0 — 初始版本（四类检查 + Tesseract OCR + DeepSeek纠错）
 // v1.1 — 百度云OCR + 本地代理 + Netlify部署 + 逐行对照+忽略
 // v1.2 — 匹配度原因分析 + 版本号
+// v1.3 — 逐行差异详情 + 疑似OCR误识别词提示
 
 // ============================================================
 // Data
@@ -1685,10 +1690,63 @@ function renderDiffView() {
 
     html += '<div class="diff-row ' + rowClass + (rowIgnored ? ' ignored' : '') + '">';
 
+    // Build word sets for inline highlighting (only for partial rows)
+    var ocrWordSet = null, reqWordSet = null, nearMissWordMap = null;
+    if (p.ocr && p.req) {
+      ocrWordSet = getWordsFn(p.ocr.text);
+      reqWordSet = getWordsFn(p.req.text);
+      // Find near-misses within this pair
+      nearMissWordMap = {};
+      var oArr = [], rArr = [];
+      ocrWordSet.forEach(function(w) { if (!reqWordSet.has(w)) oArr.push(w); });
+      reqWordSet.forEach(function(w) { if (!ocrWordSet.has(w)) rArr.push(w); });
+      for (var nai = 0; nai < rArr.length; nai++) {
+        var rw = rArr[nai];
+        if (rw.length < 3) continue;
+        for (var naj = 0; naj < oArr.length; naj++) {
+          var ow = oArr[naj];
+          if (Math.abs(rw.length - ow.length) > 2) continue;
+          var minL = Math.min(rw.length, ow.length), maxL = Math.max(rw.length, ow.length);
+          var d = maxL - minL;
+          for (var nk = 0; nk < minL; nk++) { if (rw[nk] !== ow[nk]) d++; if (d > 2) break; }
+          if (d <= 2 && d > 0) { nearMissWordMap[rw] = ow; nearMissWordMap[ow] = rw; break; }
+        }
+      }
+    }
+
+    // Helper: render text with word highlighting
+    function renderHighlighted(text, ownWordSet, otherWordSet, nearMap, cellClass) {
+      if (!text) return '<span class="diff-cell-empty">—</span>';
+      if (!ownWordSet || !otherWordSet) return escHtml(text);
+      var tokens = text.match(/([\wЀ-ӿ一-鿿0-9\.\/\-:]+|[^\wЀ-ӿ一-鿿0-9\.\/\-:]+)/g) || [text];
+      var out = '';
+      for (var ti = 0; ti < tokens.length; ti++) {
+        var tok = tokens[ti];
+        var normTok = normalizeCyrillic(tok).toLowerCase().replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
+        if (/^[\wЀ-ӿ一-鿿0-9\.\/\-:]+$/.test(tok) && normTok.length >= 2) {
+          if (otherWordSet.has(normTok)) {
+            out += escHtml(tok);
+          } else if (nearMap && nearMap[normTok]) {
+            out += '<span class="w-near" title="疑似误识别：' + escHtml(nearMap[normTok]) + '">' + escHtml(tok) + '</span>';
+          } else {
+            var cls = cellClass === 'ocr' ? 'w-extra' : 'w-miss';
+            out += '<span class="' + cls + '">' + escHtml(tok) + '</span>';
+          }
+        } else {
+          out += escHtml(tok);
+        }
+      }
+      return out;
+    }
+
     // OCR cell
     html += '<div class="diff-cell-ocr">';
     if (p.ocr) {
-      html += escHtml(p.ocr.text);
+      if (p.req) {
+        html += renderHighlighted(p.ocr.text, ocrWordSet, reqWordSet, nearMissWordMap, 'ocr');
+      } else {
+        html += escHtml(p.ocr.text);
+      }
     } else {
       html += '<span class="diff-cell-empty">—</span>';
     }
@@ -1708,7 +1766,11 @@ function renderDiffView() {
     // Req cell
     html += '<div class="diff-cell-req">';
     if (p.req) {
-      html += escHtml(p.req.text);
+      if (p.ocr) {
+        html += renderHighlighted(p.req.text, reqWordSet, ocrWordSet, nearMissWordMap, 'req');
+      } else {
+        html += escHtml(p.req.text);
+      }
     } else {
       html += '<span class="diff-cell-empty">—</span>';
     }
@@ -1804,21 +1866,114 @@ function renderDiffView() {
     return new Set(cleaned.split(' ').filter(function(w) { return w.length >= 2; }));
   };
   var ow = getWordsFn(activeOcrText), rw = getWordsFn(activeReqText);
+
+  // --- Per-partial-match line details ---
+  var partialDetails = [];
+  for (var di = 0; di < pairs.length; di++) {
+    var dp = pairs[di];
+    var diOcrKey = dp.ocr ? dp.ocr.key : '';
+    var diReqKey = dp.req ? dp.req.key : '';
+    if (state.ignoredOcrLines[diOcrKey] || state.ignoredReqLines[diReqKey]) continue;
+    if (!dp.ocr || !dp.req) continue; // only analyze paired lines
+    if (dp.matchRate >= 40) continue; // skip well-matched lines
+
+    // Find differing words
+    var oWords = getWordsFn(dp.ocr.text);
+    var rWords = getWordsFn(dp.req.text);
+    var oOnly = [], rOnly = [];
+    oWords.forEach(function(w) { if (!rWords.has(w)) oOnly.push(w); });
+    rWords.forEach(function(w) { if (!oWords.has(w)) rOnly.push(w); });
+
+    if (oOnly.length > 0 || rOnly.length > 0) {
+      partialDetails.push({
+        ocrText: dp.ocr.text,
+        reqText: dp.req.text,
+        matchRate: dp.matchRate,
+        ocrExtra: oOnly.slice(0, 5),
+        reqMissing: rOnly.slice(0, 5),
+      });
+    }
+  }
+
+  if (partialDetails.length > 0) {
+    items.push({ dot: 'warn', text: '以下 <b>' + partialDetails.length + '</b> 行差异较大，需要关注：', isSection: true });
+    for (var pdi = 0; pdi < Math.min(partialDetails.length, 6); pdi++) {
+      var pd = partialDetails[pdi];
+      var detailText = 'OCR: <b>' + escHtml(pd.ocrText.slice(0, 80)) + (pd.ocrText.length > 80 ? '…' : '') + '</b>';
+      detailText += '<br>需求: <b>' + escHtml(pd.reqText.slice(0, 80)) + (pd.reqText.length > 80 ? '…' : '') + '</b>';
+      if (pd.reqMissing.length > 0) detailText += '<br><span style="color:#dc2626;">需求有但OCR未识别: ' + pd.reqMissing.join(', ') + '</span>';
+      if (pd.ocrExtra.length > 0) detailText += '<br><span style="color:#3b82f6;">OCR多识别: ' + pd.ocrExtra.join(', ') + '</span>';
+      items.push({ dot: pd.matchRate >= 30 ? 'warn' : 'fail', text: detailText });
+    }
+    if (partialDetails.length > 6) {
+      items.push({ dot: 'warn', text: '…还有 ' + (partialDetails.length - 6) + ' 行差异较大，请在表格中查看' });
+    }
+  }
+
+  // --- Near-miss word detection (possible OCR errors) ---
   var onlyOcr = [], onlyReq = [];
   ow.forEach(function(w) { if (!rw.has(w)) onlyOcr.push(w); });
   rw.forEach(function(w) { if (!ow.has(w)) onlyReq.push(w); });
-  if (onlyReq.length > 0) {
-    var topMissing = onlyReq.slice(0, 8).join('、');
-    items.push({ dot: 'fail', text: '需求中但OCR未识别的词（前8个）：<b>' + topMissing + '</b>' + (onlyReq.length > 8 ? '…等' + onlyReq.length + '个' : '') });
+
+  // Find near-misses: words in onlyReq that are within 1-2 char edits of words in onlyOcr
+  var nearMisses = [];
+  for (var nmi = 0; nmi < onlyReq.length; nmi++) {
+    var rw = onlyReq[nmi];
+    if (rw.length < 3) continue;
+    for (var nmj = 0; nmj < onlyOcr.length; nmj++) {
+      var ow = onlyOcr[nmj];
+      if (ow.length < 3) continue;
+      // Quick length check
+      var lenDiff = Math.abs(rw.length - ow.length);
+      if (lenDiff > 2) continue;
+      // Count differing characters
+      var minLen = Math.min(rw.length, ow.length);
+      var maxLen = Math.max(rw.length, ow.length);
+      var diffs = maxLen - minLen;
+      for (var nk = 0; nk < minLen; nk++) {
+        if (rw[nk] !== ow[nk]) diffs++;
+        if (diffs > 2) break;
+      }
+      if (diffs <= 2 && diffs > 0) {
+        nearMisses.push({ req: rw, ocr: ow, diffs: diffs });
+        break;
+      }
+    }
   }
-  if (onlyOcr.length > 0) {
-    var topExtra = onlyOcr.slice(0, 8).join('、');
-    items.push({ dot: 'warn', text: 'OCR多识别的词（前8个）：<b>' + topExtra + '</b>' + (onlyOcr.length > 8 ? '…等' + onlyOcr.length + '个' : '') });
+
+  if (nearMisses.length > 0) {
+    var nearText = '';
+    for (var nmi2 = 0; nmi2 < Math.min(nearMisses.length, 6); nmi2++) {
+      var nm = nearMisses[nmi2];
+      nearText += (nmi2 > 0 ? '；' : '') + '<b>' + nm.req + '</b> → OCR: <b>' + nm.ocr + '</b>';
+    }
+    items.push({ dot: 'warn', text: '疑似OCR误识别（' + nearMisses.length + '处）：' + nearText + (nearMisses.length > 6 ? '…等' : '') });
+  }
+
+  // Remaining truly missing/extra words
+  var trulyMissing = onlyReq.filter(function(w) {
+    return !nearMisses.some(function(nm) { return nm.req === w; });
+  });
+  var trulyExtra = onlyOcr.filter(function(w) {
+    return !nearMisses.some(function(nm) { return nm.ocr === w; });
+  });
+
+  if (trulyMissing.length > 0) {
+    var topMissing = trulyMissing.slice(0, 8).join('、');
+    items.push({ dot: 'fail', text: '需求中缺失的词（前8）：<b>' + topMissing + '</b>' + (trulyMissing.length > 8 ? '…等' + trulyMissing.length + '个' : '') });
+  }
+  if (trulyExtra.length > 0) {
+    var topExtra = trulyExtra.slice(0, 8).join('、');
+    items.push({ dot: 'warn', text: 'OCR多出的词（前8）：<b>' + topExtra + '</b>' + (trulyExtra.length > 8 ? '…等' + trulyExtra.length + '个' : '') });
   }
 
   // Build HTML
   for (var ci = 0; ci < items.length; ci++) {
-    reasonsHtml += '<div class="diff-reason-item"><span class="diff-reason-dot ' + items[ci].dot + '"></span><span>' + items[ci].text + '</span></div>';
+    if (items[ci].isSection) {
+      reasonsHtml += '<div style="margin-top:10px;font-weight:600;font-size:13px;">' + items[ci].text + '</div>';
+    } else {
+      reasonsHtml += '<div class="diff-reason-item"><span class="diff-reason-dot ' + items[ci].dot + '"></span><span>' + items[ci].text + '</span></div>';
+    }
   }
   reasonsEl.innerHTML = reasonsHtml;
   reasonsEl.classList.remove('hidden');
