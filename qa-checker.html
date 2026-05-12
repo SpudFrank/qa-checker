@@ -150,17 +150,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 
 /* Diff comparison view */
 .diff-toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-.diff-container { display: flex; gap: 16px; margin-top: 16px; }
-.diff-panel { flex: 1; min-width: 0; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; }
-.diff-panel-header { background: #f8f9fa; padding: 10px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
-.diff-panel-header .diff-stats { font-size: 11px; font-weight: 400; color: #888; }
-.diff-panel-body { padding: 14px; font-size: 13px; line-height: 1.8; max-height: 420px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; }
-.diff-hl-added { background: #d1fae5; border-radius: 2px; padding: 0 1px; }
-.diff-hl-missing { background: #fee2e2; border-radius: 2px; padding: 0 1px; text-decoration: line-through; }
-.diff-hl-match { background: transparent; }
-.diff-match-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 12px; }
-.diff-match-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
-.diff-empty { color: #aaa; font-style: italic; }
+.diff-container { margin-top: 16px; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; }
+.diff-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fafafa; border-bottom: 1px solid #e0e0e0; }
+.diff-match-bar { height: 6px; background: #e5e7eb; }
+.diff-match-bar-fill { height: 100%; transition: width 0.4s; }
+.diff-table-header { display: flex; background: #f8f9fa; border-bottom: 1px solid #e0e0e0; font-size: 12px; font-weight: 600; color: #666; }
+.diff-th-ocr { flex: 1; padding: 8px 14px; border-right: 1px solid #e0e0e0; }
+.diff-th-req { flex: 1; padding: 8px 14px; }
+.diff-th-status { width: 72px; padding: 8px 6px; text-align: center; border-right: 1px solid #e0e0e0; font-size: 11px; }
+.diff-table-body { max-height: 450px; overflow-y: auto; }
+.diff-row { display: flex; border-bottom: 1px solid #f0f0f0; min-height: 38px; }
+.diff-row:last-child { border-bottom: none; }
+.diff-row.ignored { opacity: 0.4; }
+.diff-row.ignored .diff-cell-ocr,
+.diff-row.ignored .diff-cell-req { text-decoration: line-through; text-decoration-color: #999; }
+.diff-cell-ocr { flex: 1; padding: 8px 14px; border-right: 1px solid #f0f0f0; font-size: 13px; line-height: 1.6; word-break: break-word; font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; background: #fafdfa; }
+.diff-cell-req { flex: 1; padding: 8px 14px; font-size: 13px; line-height: 1.6; word-break: break-word; font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; background: #fdfafa; }
+.diff-cell-empty { color: #ccc; font-style: italic; }
+.diff-cell-status { width: 72px; padding: 6px 4px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #f0f0f0; }
+.diff-row.match .diff-cell-status { color: #16a34a; }
+.diff-row.partial .diff-cell-status { color: #d97706; }
+.diff-row.extra .diff-cell-status { color: #3b82f6; }
+.diff-row.missing .diff-cell-status { color: #dc2626; }
+.diff-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 8px; white-space: nowrap; }
+.diff-row.match .diff-badge { background: #dcfce7; color: #15803d; }
+.diff-row.partial .diff-badge { background: #fef3c7; color: #92400e; }
+.diff-row.extra .diff-badge { background: #dbeafe; color: #1d4ed8; }
+.diff-row.missing .diff-badge { background: #fee2e2; color: #b91c1c; }
+.diff-ignore-btn { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid #ddd; background: #fff; color: #999; cursor: pointer; white-space: nowrap; }
+.diff-ignore-btn:hover { border-color: #f59e0b; color: #d97706; background: #fffbeb; }
+.diff-row.ignored .diff-ignore-btn { border-color: #f59e0b; color: #d97706; background: #fffbeb; }
+.diff-empty { color: #aaa; font-style: italic; padding: 24px; text-align: center; }
 </style>
 </head>
 <body>
@@ -249,17 +269,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
         <span id="diffRefreshHint" style="font-size:11px;color:#999;"></span>
       </div>
       <div class="diff-container hidden" id="diffContainer">
-        <div class="diff-panel">
-          <div class="diff-panel-header">&#128269; OCR识别结果 <span class="diff-stats" id="diffOcrStats"></span></div>
-          <div class="diff-panel-body" id="diffOcr"></div>
+        <div class="diff-toolbar">
+          <span style="font-size:13px;font-weight:600;">&#128065; OCR vs 需求 逐行对照</span>
+          <span style="font-size:12px;color:#888;" id="diffRefreshHint"></span>
+          <div style="flex:1;"></div>
+          <span style="font-size:12px;color:#666;">已忽略 <strong id="diffIgnoredCount">0</strong> 行</span>
+          <button class="btn btn-sm btn-outline" onclick="clearIgnoredLines()" style="font-size:11px;">清除忽略</button>
         </div>
-        <div class="diff-panel">
-          <div class="diff-panel-header">&#128221; 需求文本 <span class="diff-stats" id="diffReqStats"></span></div>
-          <div class="diff-panel-body" id="diffReq"></div>
+        <div class="diff-match-bar" id="diffMatchBar">
+          <div class="diff-match-bar-fill" id="diffMatchBarFill"></div>
         </div>
-      </div>
-      <div class="diff-match-bar hidden" id="diffMatchBar">
-        <div class="diff-match-bar-fill" id="diffMatchBarFill"></div>
+        <div class="diff-table-header">
+          <div class="diff-th-ocr">OCR识别结果</div>
+          <div class="diff-th-status"></div>
+          <div class="diff-th-req">需求文本</div>
+        </div>
+        <div class="diff-table-body" id="diffTableBody">
+          <div class="diff-empty">请先在上一步识别图片文字，然后输入需求文本</div>
+        </div>
       </div>
       <div style="margin-top:14px;">
         <button class="btn btn-primary" id="btnStartCheck" onclick="startCheck()" style="width:100%;justify-content:center;padding:12px;">
@@ -358,7 +385,9 @@ let state = {
   images: [],       // { file, name, preview, lang, ocrText }
   reqText: '',
   checkResults: null,
-  ocrLoading: {}
+  ocrLoading: {},
+  ignoredOcrLines: {},  // { lineIndex: true }
+  ignoredReqLines: {},  // { lineIndex: true }
 };
 
 // ============================================================
@@ -1079,7 +1108,7 @@ function goToStep(n) {
 }
 
 function resetAll() {
-  state = { step:1, categoryId:null, images:[], reqText:'', checkResults:null, ocrLoading:{} };
+  state = { step:1, categoryId:null, images:[], reqText:'', checkResults:null, ocrLoading:{}, ignoredOcrLines:{}, ignoredReqLines:{} };
   document.getElementById('fileInput').value = '';
   document.getElementById('reqText').value = '';
   document.getElementById('imageList').innerHTML = '';
@@ -1503,7 +1532,7 @@ function renderImageSummaryInStep3() {
 }
 
 // ============================================================
-// Diff / Comparison View
+// Diff / Comparison View  (line-by-line with ignore)
 // ============================================================
 var _diffTimer = null;
 
@@ -1518,127 +1547,184 @@ function scheduleDiffRefresh() {
 
 function toggleDiffView() {
   var container = document.getElementById('diffContainer');
-  var bar = document.getElementById('diffMatchBar');
   var btn = document.getElementById('btnToggleDiff');
   var isHidden = container.classList.contains('hidden');
 
   if (isHidden) {
     container.classList.remove('hidden');
-    bar.classList.remove('hidden');
     btn.innerHTML = '&#128065; 隐藏OCR对照';
-    // Update reqText from textarea
     state.reqText = document.getElementById('reqText').value;
     renderDiffView();
-    // Scroll into view
     container.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } else {
     container.classList.add('hidden');
-    bar.classList.add('hidden');
     btn.innerHTML = '&#128065; 查看OCR对照';
   }
 }
 
 function renderDiffView() {
-  var ocrParts = [];
+  // Collect OCR lines from all images (no filename headers)
+  var ocrLines = [];
   for (var i = 0; i < state.images.length; i++) {
     var img = state.images[i];
     if (img.ocrText) {
-      ocrParts.push('--- ' + img.name + ' (' + (img.lang || '?') + ') ---\n' + img.ocrText);
+      var imgLines = img.ocrText.split('\n').filter(function(l) { return l.trim(); });
+      for (var j = 0; j < imgLines.length; j++) {
+        ocrLines.push({ text: imgLines[j], imgIdx: i, lineIdx: j, key: i + '_' + j });
+      }
     }
   }
-  var ocrText = ocrParts.join('\n\n');
 
   var reqText = document.getElementById('reqText').value;
   state.reqText = reqText;
+  var rawReqLines = reqText.split('\n').filter(function(l) { return l.trim(); });
+  var reqLines = [];
+  for (var k = 0; k < rawReqLines.length; k++) {
+    reqLines.push({ text: rawReqLines[k], lineIdx: k, key: 'r_' + k });
+  }
 
-  // Build word sets for highlighting
-  var getWords = function(text) {
-    var cleaned = text.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9\.\/\-:]+/g, ' ').replace(/\s+/g, ' ').trim();
-    var words = cleaned.split(' ');
-    var result = [];
-    for (var i = 0; i < words.length; i++) {
-      var w = words[i].replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
-      if (w.length >= 2) result.push(w);
+  // Word-level similarity helper
+  function wordSim(a, b) {
+    var getWords = function(t) {
+      var cleaned = t.toLowerCase().replace(/[^\wЀ-ӿ一-鿿0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      var wrds = cleaned.split(' ').filter(function(w) { return w.length >= 2; });
+      return new Set(wrds);
+    };
+    var wa = getWords(a), wb = getWords(b);
+    if (wa.size === 0 || wb.size === 0) return 0;
+    var inter = 0;
+    wa.forEach(function(w) { if (wb.has(w)) inter++; });
+    return inter / Math.max(wa.size, wb.size);
+  }
+
+  // Greedy pair OCR lines with req lines
+  var pairs = [];
+  var usedReq = {};
+  for (var oi = 0; oi < ocrLines.length; oi++) {
+    var bestJ = -1, bestSim = 0.25; // threshold
+    for (var ri = 0; ri < reqLines.length; ri++) {
+      if (usedReq[ri]) continue;
+      var sim = wordSim(ocrLines[oi].text, reqLines[ri].text);
+      if (sim > bestSim) { bestSim = sim; bestJ = ri; }
     }
-    return new Set(result);
-  };
+    if (bestJ >= 0) {
+      usedReq[bestJ] = true;
+      pairs.push({ ocr: ocrLines[oi], req: reqLines[bestJ], matchRate: Math.round(bestSim * 100) });
+    } else {
+      pairs.push({ ocr: ocrLines[oi], req: null, matchRate: 0 });
+    }
+  }
+  // Unmatched req lines
+  for (var ri2 = 0; ri2 < reqLines.length; ri2++) {
+    if (!usedReq[ri2]) {
+      pairs.push({ ocr: null, req: reqLines[ri2], matchRate: 0 });
+    }
+  }
 
-  var ocrWords = getWords(ocrText);
-  var reqWords = getWords(reqText);
+  // Build table rows
+  var body = document.getElementById('diffTableBody');
+  var html = '';
+  var totalMatched = 0, totalLines = pairs.length;
+  var activeCount = 0, matchSum = 0;
 
-  // Calculate match stats
-  var allWords = new Set();
-  ocrWords.forEach(function(w) { allWords.add(w); });
-  reqWords.forEach(function(w) { allWords.add(w); });
+  for (var pi = 0; pi < pairs.length; pi++) {
+    var p = pairs[pi];
+    var ocrKey = p.ocr ? p.ocr.key : '';
+    var reqKey = p.req ? p.req.key : '';
 
-  var matchCount = 0;
-  allWords.forEach(function(w) {
-    if (ocrWords.has(w) && reqWords.has(w)) matchCount++;
-  });
-  var totalUnique = allWords.size;
-  var matchRate = totalUnique > 0 ? Math.round(matchCount / totalUnique * 100) : 0;
+    var ocrIgnored = state.ignoredOcrLines[ocrKey];
+    var reqIgnored = state.ignoredReqLines[reqKey];
+    var rowIgnored = ocrIgnored || reqIgnored;
+
+    // Determine row class
+    var rowClass, badgeText;
+    if (p.ocr && p.req && p.matchRate >= 40) {
+      rowClass = 'match'; badgeText = '匹配 ' + p.matchRate + '%';
+    } else if (p.ocr && p.req) {
+      rowClass = 'partial'; badgeText = '部分 ' + p.matchRate + '%';
+    } else if (p.ocr && !p.req) {
+      rowClass = 'extra'; badgeText = 'OCR多出';
+    } else {
+      rowClass = 'missing'; badgeText = '需求多出';
+    }
+
+    if (!rowIgnored) {
+      activeCount++;
+      if (p.ocr && p.req) matchSum += p.matchRate;
+    }
+
+    html += '<div class="diff-row ' + rowClass + (rowIgnored ? ' ignored' : '') + '">';
+
+    // OCR cell
+    html += '<div class="diff-cell-ocr">';
+    if (p.ocr) {
+      html += escHtml(p.ocr.text);
+    } else {
+      html += '<span class="diff-cell-empty">—</span>';
+    }
+    html += '</div>';
+
+    // Status cell with ignore toggle
+    html += '<div class="diff-cell-status">';
+    html += '<span class="diff-badge">' + badgeText + '</span>';
+    if (p.ocr) {
+      html += '<button class="diff-ignore-btn" onclick="toggleIgnoreLine(\'' + ocrKey + '\',\'ocr\')" title="忽略此行">' + (ocrIgnored ? '取消' : '忽略') + '</button>';
+    }
+    if (p.req) {
+      html += '<button class="diff-ignore-btn" onclick="toggleIgnoreLine(\'' + reqKey + '\',\'req\')" title="忽略此行" style="margin-top:2px;">' + (reqIgnored ? '取消' : '忽略') + '</button>';
+    }
+    html += '</div>';
+
+    // Req cell
+    html += '<div class="diff-cell-req">';
+    if (p.req) {
+      html += escHtml(p.req.text);
+    } else {
+      html += '<span class="diff-cell-empty">—</span>';
+    }
+    html += '</div>';
+
+    html += '</div>';
+  }
+
+  body.innerHTML = html || '<div class="diff-empty">请先识别图片文字，然后输入需求文本</div>';
 
   // Update match bar
+  var avgMatch = activeCount > 0 ? Math.round(matchSum / activeCount) : 0;
   var barFill = document.getElementById('diffMatchBarFill');
-  if (matchRate >= 70) barFill.style.background = '#16a34a';
-  else if (matchRate >= 40) barFill.style.background = '#d97706';
+  if (avgMatch >= 70) barFill.style.background = '#16a34a';
+  else if (avgMatch >= 40) barFill.style.background = '#d97706';
   else barFill.style.background = '#dc2626';
-  barFill.style.width = matchRate + '%';
+  barFill.style.width = (avgMatch || 1) + '%';
 
-  // Build highlighted OCR text
-  var ocrLines = ocrText.split('\n');
-  var ocrHtml = '';
-  for (var li = 0; li < ocrLines.length; li++) {
-    var line = ocrLines[li];
-    if (!line.trim()) { ocrHtml += '\n'; continue; }
-    // Tokenize line into words + non-words
-    var tokens = line.match(/([\wЀ-ӿ一-鿿0-9\.\/\-:]+|[^\wЀ-ӿ一-鿿0-9\.\/\-:]+)/g) || [line];
-    for (var ti = 0; ti < tokens.length; ti++) {
-      var token = tokens[ti];
-      var clean = token.toLowerCase().replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
-      if (/^[\wЀ-ӿ一-鿿0-9\.\/\-:]+$/.test(token) && clean.length >= 2) {
-        if (reqWords.has(clean)) {
-          ocrHtml += '<span class="diff-hl-match">' + escHtml(token) + '</span>';
-        } else {
-          ocrHtml += '<span class="diff-hl-added">' + escHtml(token) + '</span>';
-        }
-      } else {
-        ocrHtml += escHtml(token);
-      }
-    }
-    ocrHtml += '\n';
-  }
-  document.getElementById('diffOcr').innerHTML = ocrHtml || '<span class="diff-empty">暂无OCR结果，请先在上一步识别图片文字</span>';
-
-  // Build highlighted Requirement text
-  var reqLines = reqText.split('\n');
-  var reqHtml = '';
-  for (var rli = 0; rli < reqLines.length; rli++) {
-    var rline = reqLines[rli];
-    if (!rline.trim()) { reqHtml += '\n'; continue; }
-    var rtokens = rline.match(/([\wЀ-ӿ一-鿿0-9\.\/\-:]+|[^\wЀ-ӿ一-鿿0-9\.\/\-:]+)/g) || [rline];
-    for (var rti = 0; rti < rtokens.length; rti++) {
-      var rtoken = rtokens[rti];
-      var rclean = rtoken.toLowerCase().replace(/^[\.\/\-:]+|[\.\/\-:]+$/g, '');
-      if (/^[\wЀ-ӿ一-鿿0-9\.\/\-:]+$/.test(rtoken) && rclean.length >= 2) {
-        if (ocrWords.has(rclean)) {
-          reqHtml += '<span class="diff-hl-match">' + escHtml(rtoken) + '</span>';
-        } else {
-          reqHtml += '<span class="diff-hl-missing">' + escHtml(rtoken) + '</span>';
-        }
-      } else {
-        reqHtml += escHtml(rtoken);
-      }
-    }
-    reqHtml += '\n';
-  }
-  document.getElementById('diffReq').innerHTML = reqHtml || '<span class="diff-empty">请输入需求文本</span>';
-
-  // Stats
-  document.getElementById('diffOcrStats').textContent = '共 ' + ocrWords.size + ' 个有效词';
-  document.getElementById('diffReqStats').textContent = '共 ' + reqWords.size + ' 个有效词';
+  // Update stats
+  var ignoredCount = Object.keys(state.ignoredOcrLines).length + Object.keys(state.ignoredReqLines).length;
+  document.getElementById('diffIgnoredCount').textContent = ignoredCount;
   var hint = document.getElementById('diffRefreshHint');
-  hint.textContent = '匹配度 ' + matchRate + '% | 编辑需求文本后自动刷新';
+  hint.textContent = '平均匹配 ' + avgMatch + '% | ' + activeCount + ' 活跃行 | 编辑后自动刷新';
+}
+
+function toggleIgnoreLine(key, type) {
+  if (type === 'ocr') {
+    if (state.ignoredOcrLines[key]) {
+      delete state.ignoredOcrLines[key];
+    } else {
+      state.ignoredOcrLines[key] = true;
+    }
+  } else {
+    if (state.ignoredReqLines[key]) {
+      delete state.ignoredReqLines[key];
+    } else {
+      state.ignoredReqLines[key] = true;
+    }
+  }
+  renderDiffView();
+}
+
+function clearIgnoredLines() {
+  state.ignoredOcrLines = {};
+  state.ignoredReqLines = {};
+  renderDiffView();
 }
 
 function escHtml(s) {
@@ -1661,8 +1747,31 @@ async function startCheck() {
     if (ta && state.images[i]) state.images[i].ocrText = ta.value;
   }
 
-  const allOcr = state.images.map(img => img.ocrText || '').join('\n---\n');
-  const req = state.reqText;
+  // Build OCR text, excluding ignored lines
+  var ocrParts = [];
+  for (var imgI = 0; imgI < state.images.length; imgI++) {
+    var img = state.images[imgI];
+    if (!img.ocrText) continue;
+    var lines = img.ocrText.split('\n');
+    var keptLines = [];
+    for (var li = 0; li < lines.length; li++) {
+      if (!state.ignoredOcrLines[imgI + '_' + li]) {
+        keptLines.push(lines[li]);
+      }
+    }
+    if (keptLines.length > 0) ocrParts.push(keptLines.join('\n'));
+  }
+  const allOcr = ocrParts.join('\n---\n');
+
+  // Build requirement text, excluding ignored lines
+  var reqLines = state.reqText.split('\n');
+  var keptReqLines = [];
+  for (var rli = 0; rli < reqLines.length; rli++) {
+    if (!state.ignoredReqLines['r_' + rli]) {
+      keptReqLines.push(reqLines[rli]);
+    }
+  }
+  const req = keptReqLines.join('\n');
   const ocrDates = extractDates(allOcr);
   const reqDates = extractDates(req);
   const ocrCDKs = extractCDKs(allOcr);
