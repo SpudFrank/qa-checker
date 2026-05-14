@@ -2337,4 +2337,178 @@ async function startCheck() {
           status = 'fail'; detail = '需求日期: ' + reqDates.join('、') + '，图片中未检测到日期。';
         } else {
           const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
-          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)))
+          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
+          status = match ? 'pass' : 'fail';
+          detail = match ? '日期一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '日期不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
+        }
+        break;
+      }
+      case 'time_accurate': {
+        if (ocrDates.length === 0) {
+          status = 'fail'; detail = '图片中未检测到时间信息，请检查清晰度或手动编辑OCR结果。';
+        } else if (reqDates.length === 0) {
+          status = 'warn'; detail = '图片: ' + ocrDates.join('、') + '，需求中未发现日期。';
+        } else {
+          const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
+          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
+          status = match ? 'pass' : 'fail';
+          detail = match ? '时间一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '时间不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
+        }
+        break;
+      }
+      case 'en_correct': {
+        const enImgs = state.images.filter(img => img.lang === 'EN');
+        if (enImgs.length === 0) { status = 'warn'; detail = '未检测到EN语言标识的图片。'; }
+        else {
+          const sims = enImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.3 ? 'pass' : avg > 0.1 ? 'warn' : 'fail';
+          detail = 'EN公告图片匹配度: ' + Math.round(avg * 100) + '%。';
+        }
+        break;
+      }
+      case 'ru_correct': {
+        const ruImgs = state.images.filter(img => img.lang === 'RU');
+        if (ruImgs.length === 0) { status = 'warn'; detail = '未检测到RU语言标识的图片。'; }
+        else {
+          const sims = ruImgs.map(img => calcSimilarity(img.ocrText, req));
+          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
+          status = avg > 0.2 ? 'pass' : avg > 0.05 ? 'warn' : 'fail';
+          detail = 'RU公告图片匹配度: ' + Math.round(avg * 100) + '%。';
+        }
+        break;
+      }
+      case 'text_correct': {
+        if (!allOcr.trim()) { status = 'warn'; detail = '图片OCR结果为空，请先识别文字。'; }
+        else {
+          const sim = calcSimilarity(allOcr, req);
+          if (sim > 0.4) status = 'pass';
+          else if (sim > 0.15) status = 'warn';
+          else status = 'fail';
+          detail = '图片文案匹配度: ' + Math.round(sim * 100) + '%。匹配度低时请人工逐句核对。';
+        }
+        break;
+      }
+      case 'lang_filename': {
+        const required = ['EN','RU','DE','FR'];
+        const imgLangs = state.images.map(img => img.lang).filter(Boolean);
+        const missingL = required.filter(l => !imgLangs.includes(l));
+        const extraL = imgLangs.filter(l => !required.includes(l));
+        if (missingL.length === 0 && extraL.length === 0) {
+          status = 'pass'; detail = '四语文件齐全: ' + imgLangs.join('、') + '，均与文件名一致。';
+        } else if (missingL.length > 0) {
+          status = 'fail'; detail = '缺少语种: ' + missingL.join('、') + '。已检测: ' + (imgLangs.join('、') || '无');
+        } else {
+          status = 'warn'; detail = '多出语种: ' + extraL.join('、') + '。已检测: ' + imgLangs.join('、');
+        }
+        break;
+      }
+      case 'platform_match':
+        status = 'manual'; detail = '请人工检查图片中跳转链接/二维码指向的平台是否与需求一致。';
+        break;
+      case 'reward_icon_match':
+        status = 'manual'; detail = '请人工比对奖励图标是否与需求文档中描述一致。';
+        break;
+      case 'reward_icon_bg':
+        status = 'manual'; detail = '请人工确认奖励图标背景颜色是否统一。';
+        break;
+    }
+
+    state.checkResults[check.id] = { status, detail };
+  }
+
+  goToStep(4);
+  renderResults(cat);
+}
+
+// ============================================================
+// Results rendering
+// ============================================================
+function renderResults(cat) {
+  const results = state.checkResults;
+  let pass = 0, fail = 0, warn = 0, manual = 0;
+  for (const c of cat.checks) {
+    const s = results[c.id]?.status;
+    if (s === 'pass') pass++;
+    else if (s === 'fail') fail++;
+    else if (s === 'warn') warn++;
+    else if (s === 'manual') manual++;
+  }
+
+  // Summary
+  document.getElementById('resultSummary').innerHTML = `
+    <div class="result-card pass"><div class="count">${pass}</div><div class="label">通过</div></div>
+    <div class="result-card fail"><div class="count">${fail}</div><div class="label">未通过</div></div>
+    <div class="result-card warn"><div class="count">${warn}</div><div class="label">需确认</div></div>
+    <div class="result-card manual"><div class="count">${manual}</div><div class="label">人工核实</div></div>
+  `;
+
+  // Check items
+  const icons = { pass: '&#10004;', fail: '&#10008;', warn: '&#9888;', manual: '&#128065;', pending: '&#9203;' };
+  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实', pending: '待检查' };
+  document.getElementById('checkItems').innerHTML = cat.checks.map(c => {
+    const r = results[c.id] || { status:'pending', detail:'' };
+    return `
+      <div class="check-item ${r.status}">
+        <div class="status-icon">${icons[r.status]}</div>
+        <div class="check-body">
+          <div class="check-label">${c.label}</div>
+          <div class="check-desc">${c.desc}</div>
+          ${r.detail ? '<div class="check-detail">'+r.detail+'</div>' : ''}
+        </div>
+        <span class="status-badge">${labels[r.status]}</span>
+      </div>
+    `;
+  }).join('');
+
+  // Verdict
+  const vEl = document.getElementById('verdict');
+  if (fail > 0) {
+    vEl.className = 'verdict fail';
+    vEl.innerHTML = '&#10008; 发现 ' + fail + ' 项未通过，请修正后重新检查';
+  } else if (warn > 0 || manual > 0) {
+    vEl.className = 'verdict warn';
+    vEl.innerHTML = '&#9888; 自动检查项已通过，还有 ' + (warn + manual) + ' 项需要人工确认';
+  } else {
+    vEl.className = 'verdict pass';
+    vEl.innerHTML = '&#10004; 所有检查项均已通过！';
+  }
+}
+
+// ============================================================
+// Export
+// ============================================================
+function exportReport() {
+  const cat = CATEGORIES.find(c => c.id === state.categoryId);
+  if (!cat || !state.checkResults) return;
+
+  const results = state.checkResults;
+  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实' };
+
+  let text = '物料质量检查报告\n';
+  text += '类别: ' + cat.name + '\n';
+  text += '检查时间: ' + new Date().toLocaleString() + '\n';
+  text += '上传图片: ' + state.images.length + ' 张\n';
+  text += '---\n';
+  for (const c of cat.checks) {
+    const r = results[c.id] || { status:'pending', detail:'' };
+    const icon = r.status === 'pass' ? '[通过]' : r.status === 'fail' ? '[未通过]' : r.status === 'warn' ? '[需确认]' : r.status === 'manual' ? '[人工]' : '[待查]';
+    text += icon + ' ' + c.label + '\n';
+    if (r.detail) text += '  详情: ' + r.detail + '\n';
+  }
+
+  const blob = new Blob([text], { type:'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'QA检查报告_' + cat.id + '_' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+
+// ============================================================
+// Start
+// ============================================================
+init();
+updateStepUI();
+</script>
+</body>
+</html>
