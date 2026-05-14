@@ -331,7 +331,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 // ============================================================
 // Config
 // ============================================================
-var APP_VERSION = '1.5.2';
+var APP_VERSION = '1.5.3';
 // v1.0 — 初始版本（四类检查 + Tesseract OCR + DeepSeek纠错）
 // v1.1 — 百度云OCR + 本地代理 + Netlify部署 + 逐行对照+忽略
 // v1.2 — 匹配度原因分析 + 版本号
@@ -343,6 +343,7 @@ var APP_VERSION = '1.5.2';
 // v1.5 — OCR跨行合并匹配：自动合并相邻OCR行与需求文本对齐
 // v1.5.1 — 新增星级评分检测：extractRating()识别★☆⭑✰等星符及OCR回退*号，社区和内宣类别增加评分比对
 // v1.5.2 — 对照表按原始文档顺序排列（OCR行号优先），解决匹配算法导致的文本顺序混乱
+// v1.5.3 — 匹配算法改为以需求文本顺序为锚点：逐行处理需求，为每行找最佳OCR段合并对齐
 
 // ============================================================
 // Data
@@ -1734,81 +1735,63 @@ function renderDiffView() {
     return new Set(cleaned.split(' ').filter(function(w) { return w.length >= 2; }));
   };
 
-  // Segment-based multi-line matching (handles OCR text split across lines)
+  // Multi-line matching — anchored to requirement text order.
   // Generate OCR segments: individual lines + merged adjacent lines (up to 3)
   var ocrSegments = [];
   for (var oi = 0; oi < ocrLines.length; oi++) {
-    // Individual line
     ocrSegments.push({ text: ocrLines[oi].text, oStart: oi, oEnd: oi });
-    // Merged pair
     if (oi + 1 < ocrLines.length) {
       ocrSegments.push({ text: ocrLines[oi].text + ' ' + ocrLines[oi+1].text, oStart: oi, oEnd: oi+1 });
     }
-    // Merged triple
     if (oi + 2 < ocrLines.length) {
       ocrSegments.push({ text: ocrLines[oi].text + ' ' + ocrLines[oi+1].text + ' ' + ocrLines[oi+2].text, oStart: oi, oEnd: oi+2 });
     }
   }
 
-  // For each segment, find best matching requirement line
-  var candidates = [];
-  for (var si = 0; si < ocrSegments.length; si++) {
-    var seg = ocrSegments[si];
-    var bestReq = -1, bestSim = 0;
-    for (var ri = 0; ri < reqLines.length; ri++) {
-      var s = wordSim(seg.text, reqLines[ri].text);
-      if (s > bestSim) { bestSim = s; bestReq = ri; }
-    }
-    if (bestSim >= 0.2) {
-      // Small boost for merged segments to prefer them when close to single-line scores
-      var segLen = seg.oEnd - seg.oStart + 1;
-      var boostedSim = bestSim + (segLen > 1 ? 0.03 : 0);
-      candidates.push({ seg: seg, reqIdx: bestReq, sim: boostedSim, segLen: segLen });
-    }
-  }
-
-  // Sort by similarity descending; prefer larger (merged) segments when tied
-  candidates.sort(function(a, b) {
-    if (Math.abs(a.sim - b.sim) > 0.02) return b.sim - a.sim;
-    return b.segLen - a.segLen;
-  });
-
-  // Greedy assignment with overlap prevention (each OCR line used at most once)
+  // Process requirement lines in order — each req line claims its best OCR segment
   var usedOcr = {}, usedReq = {};
   var pairs = [];
 
-  for (var ci = 0; ci < candidates.length; ci++) {
-    var c = candidates[ci];
-    if (usedReq[c.reqIdx]) continue;
+  for (var ri = 0; ri < reqLines.length; ri++) {
+    var reqLine = reqLines[ri];
+    var bestSeg = null, bestSim = 0.2; // threshold
 
-    // Check OCR line overlap
-    var overlap = false;
-    for (var oi2 = c.seg.oStart; oi2 <= c.seg.oEnd; oi2++) {
-      if (usedOcr[oi2]) { overlap = true; break; }
-    }
-    if (overlap) continue;
-
-    // Accept this assignment
-    for (var oi3 = c.seg.oStart; oi3 <= c.seg.oEnd; oi3++) usedOcr[oi3] = true;
-    usedReq[c.reqIdx] = true;
-
-    var matchRate = Math.round(c.sim * 100);
-    if (c.seg.oStart === c.seg.oEnd) {
-      // Single line match
-      pairs.push({ ocr: ocrLines[c.seg.oStart], req: reqLines[c.reqIdx], matchRate: matchRate });
-    } else {
-      // Merged lines — build composite OCR entry
-      var mergedText = '';
-      var ocrKeys = [];
-      for (var mk = c.seg.oStart; mk <= c.seg.oEnd; mk++) {
-        mergedText += (mergedText ? ' ' : '') + ocrLines[mk].text;
-        ocrKeys.push(ocrLines[mk].key);
+    // Find best unused OCR segment for this requirement line
+    for (var si = 0; si < ocrSegments.length; si++) {
+      var seg = ocrSegments[si];
+      // Skip if any OCR line in this segment is already claimed
+      var overlap = false;
+      for (var oi2 = seg.oStart; oi2 <= seg.oEnd; oi2++) {
+        if (usedOcr[oi2]) { overlap = true; break; }
       }
-      pairs.push({
-        ocr: { text: mergedText, imgIdx: ocrLines[c.seg.oStart].imgIdx, lineIdx: ocrLines[c.seg.oStart].lineIdx, key: ocrKeys.join('+'), isMerged: true, mergedKeys: ocrKeys },
-        req: reqLines[c.reqIdx],
-        matchRate: matchRate
-      });
+      if (overlap) continue;
+
+      var sim = wordSim(seg.text, reqLine.text);
+      // Small boost for merged segments (favors merging when close to single-line score)
+      var boosted = sim + ((seg.oEnd > seg.oStart) ? 0.02 : 0);
+      if (boosted > bestSim) { bestSim = boosted; bestSeg = seg; }
+    }
+
+    if (bestSeg) {
+      for (var oi3 = bestSeg.oStart; oi3 <= bestSeg.oEnd; oi3++) usedOcr[oi3] = true;
+      usedReq[ri] = true;
+
+      var matchRate = Math.round(bestSim * 100);
+      if (bestSeg.oStart === bestSeg.oEnd) {
+        pairs.push({ ocr: ocrLines[bestSeg.oStart], req: reqLine, matchRate: matchRate });
+      } else {
+        var mergedText = '';
+        var ocrKeys = [];
+        for (var mk = bestSeg.oStart; mk <= bestSeg.oEnd; mk++) {
+          mergedText += (mergedText ? ' ' : '') + ocrLines[mk].text;
+          ocrKeys.push(ocrLines[mk].key);
+        }
+        pairs.push({
+          ocr: { text: mergedText, imgIdx: ocrLines[bestSeg.oStart].imgIdx, lineIdx: ocrLines[bestSeg.oStart].lineIdx, key: ocrKeys.join('+'), isMerged: true, mergedKeys: ocrKeys },
+          req: reqLine,
+          matchRate: matchRate
+        });
+      }
     }
   }
 
@@ -1826,19 +1809,7 @@ function renderDiffView() {
     }
   }
 
-  // Sort pairs by document position (OCR line order, then req line order)
-  pairs.sort(function(a, b) {
-    // Compute primary sort key: OCR position (or large value if no OCR)
-    var aOcrPos = a.ocr ? (a.ocr.lineIdx != null ? a.ocr.lineIdx : 9999) : 9999;
-    var bOcrPos = b.ocr ? (b.ocr.lineIdx != null ? b.ocr.lineIdx : 9999) : 9999;
-    if (aOcrPos !== bOcrPos) return aOcrPos - bOcrPos;
-    // Secondary: req position (for unmatched req lines sorted together)
-    var aReqPos = a.req ? (a.req.lineIdx != null ? a.req.lineIdx : 9999) : 9999;
-    var bReqPos = b.req ? (b.req.lineIdx != null ? b.req.lineIdx : 9999) : 9999;
-    return aReqPos - bReqPos;
-  });
-
-  // Build table rows
+  // Build table rows (pairs already in requirement text order)
   var body = document.getElementById('diffTableBody');
   var html = '';
   var totalMatched = 0, totalLines = pairs.length;
@@ -2364,222 +2335,4 @@ async function startCheck() {
           status = 'warn'; detail = '需求作者: ' + ra.join('、') + '；图片中未明确匹配，请核实。';
         }
         break;
-      }
-      case 'rating_match': {
-        if (!reqRating && !ocrRating) {
-          status = 'warn'; detail = '未检测到星级评分信息，请确认是否需要在文本中标注（如 Rating: ★★★★★）。';
-        } else if (!reqRating) {
-          status = 'warn'; detail = '图片中检测到星级：' + ocrRating.raw + '（' + ocrRating.stars + '星），但需求文本中未标注。请人工确认。';
-        } else if (!ocrRating) {
-          status = 'fail'; detail = '需求标注：' + reqRating.raw + '（' + reqRating.stars + '星），但图片中未识别到星级。OCR可能未正确识别★符号，请人工核实图片。';
-        } else if (reqRating.stars === ocrRating.stars) {
-          status = 'pass'; detail = '星级匹配：' + reqRating.stars + '星（需求: ' + reqRating.raw + '，图片: ' + ocrRating.raw + '）。';
-        } else {
-          status = 'fail'; detail = '星级不一致！需求: ' + reqRating.raw + '（' + reqRating.stars + '星），图片识别: ' + ocrRating.raw + '（' + ocrRating.stars + '星）。请人工核实。';
-        }
-        break;
-      }
-      case 'cdk_image_match': {
-        if (reqCDKs.length === 0) {
-          status = 'warn'; detail = '需求文本中未检测到CDK码，请手动输入。';
-        } else if (ocrCDKs.length === 0) {
-          status = 'fail'; detail = '图片中未检测到CDK码。请检查图片或手动编辑OCR结果。';
-        } else {
-          const matched = ocrCDKs.filter(oc => reqCDKs.some(rc => rc.toUpperCase() === oc.toUpperCase()));
-          if (matched.length === reqCDKs.length) {
-            status = 'pass'; detail = 'CDK匹配成功: ' + matched.join('、');
-          } else if (matched.length > 0) {
-            status = 'warn'; detail = '部分匹配: ' + matched.join('、') + '。图片: ' + ocrCDKs.join('、') + '；需求: ' + reqCDKs.join('、');
-          } else {
-            status = 'fail'; detail = 'CDK不匹配！图片: ' + ocrCDKs.join('、') + '；需求: ' + reqCDKs.join('、');
-          }
-        }
-        break;
-      }
-      case 'cdk_redeem':
-        status = 'manual'; detail = 'CDK兑换验证需要实际操作游戏内兑换入口确认。';
-        break;
-      case 'cdk_validity': {
-        if (ocrDates.length === 0 && reqDates.length === 0) {
-          status = 'warn'; detail = '未能检测到日期信息。';
-        } else if (reqDates.length === 0) {
-          status = 'warn'; detail = '图片日期: ' + ocrDates.join('、') + '，需求中未发现日期。';
-        } else if (ocrDates.length === 0) {
-          status = 'fail'; detail = '需求日期: ' + reqDates.join('、') + '，图片中未检测到日期。';
-        } else {
-          const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
-          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
-          status = match ? 'pass' : 'fail';
-          detail = match ? '日期一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '日期不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
-        }
-        break;
-      }
-      case 'time_accurate': {
-        if (ocrDates.length === 0) {
-          status = 'fail'; detail = '图片中未检测到时间信息，请检查清晰度或手动编辑OCR结果。';
-        } else if (reqDates.length === 0) {
-          status = 'warn'; detail = '图片: ' + ocrDates.join('、') + '，需求中未发现日期。';
-        } else {
-          const no = ocrDates.map(normDate), nr = reqDates.map(normDate);
-          const match = nr.some(rd => no.some(od => od.includes(rd) || rd.includes(od)));
-          status = match ? 'pass' : 'fail';
-          detail = match ? '时间一致：' + ocrDates.join('、') + ' ↔ ' + reqDates.join('、') : '时间不一致！图片: ' + ocrDates.join('、') + ' vs 需求: ' + reqDates.join('、');
-        }
-        break;
-      }
-      case 'en_correct': {
-        const enImgs = state.images.filter(img => img.lang === 'EN');
-        if (enImgs.length === 0) { status = 'warn'; detail = '未检测到EN语言标识的图片。'; }
-        else {
-          const sims = enImgs.map(img => calcSimilarity(img.ocrText, req));
-          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
-          status = avg > 0.3 ? 'pass' : avg > 0.1 ? 'warn' : 'fail';
-          detail = 'EN公告图片匹配度: ' + Math.round(avg * 100) + '%。';
-        }
-        break;
-      }
-      case 'ru_correct': {
-        const ruImgs = state.images.filter(img => img.lang === 'RU');
-        if (ruImgs.length === 0) { status = 'warn'; detail = '未检测到RU语言标识的图片。'; }
-        else {
-          const sims = ruImgs.map(img => calcSimilarity(img.ocrText, req));
-          const avg = sims.reduce((a,b) => a+b, 0) / sims.length;
-          status = avg > 0.2 ? 'pass' : avg > 0.05 ? 'warn' : 'fail';
-          detail = 'RU公告图片匹配度: ' + Math.round(avg * 100) + '%。';
-        }
-        break;
-      }
-      case 'text_correct': {
-        if (!allOcr.trim()) { status = 'warn'; detail = '图片OCR结果为空，请先识别文字。'; }
-        else {
-          const sim = calcSimilarity(allOcr, req);
-          if (sim > 0.4) status = 'pass';
-          else if (sim > 0.15) status = 'warn';
-          else status = 'fail';
-          detail = '图片文案匹配度: ' + Math.round(sim * 100) + '%。匹配度低时请人工逐句核对。';
-        }
-        break;
-      }
-      case 'lang_filename': {
-        const required = ['EN','RU','DE','FR'];
-        const imgLangs = state.images.map(img => img.lang).filter(Boolean);
-        const missingL = required.filter(l => !imgLangs.includes(l));
-        const extraL = imgLangs.filter(l => !required.includes(l));
-        if (missingL.length === 0 && extraL.length === 0) {
-          status = 'pass'; detail = '四语文件齐全: ' + imgLangs.join('、') + '，均与文件名一致。';
-        } else if (missingL.length > 0) {
-          status = 'fail'; detail = '缺少语种: ' + missingL.join('、') + '。已检测: ' + (imgLangs.join('、') || '无');
-        } else {
-          status = 'warn'; detail = '多出语种: ' + extraL.join('、') + '。已检测: ' + imgLangs.join('、');
-        }
-        break;
-      }
-      case 'platform_match':
-        status = 'manual'; detail = '请人工检查图片中跳转链接/二维码指向的平台是否与需求一致。';
-        break;
-      case 'reward_icon_match':
-        status = 'manual'; detail = '请人工比对奖励图标是否与需求文档中描述一致。';
-        break;
-      case 'reward_icon_bg':
-        status = 'manual'; detail = '请人工确认奖励图标背景颜色是否统一。';
-        break;
-    }
-
-    state.checkResults[check.id] = { status, detail };
-  }
-
-  goToStep(4);
-  renderResults(cat);
-}
-
-// ============================================================
-// Results rendering
-// ============================================================
-function renderResults(cat) {
-  const results = state.checkResults;
-  let pass = 0, fail = 0, warn = 0, manual = 0;
-  for (const c of cat.checks) {
-    const s = results[c.id]?.status;
-    if (s === 'pass') pass++;
-    else if (s === 'fail') fail++;
-    else if (s === 'warn') warn++;
-    else if (s === 'manual') manual++;
-  }
-
-  // Summary
-  document.getElementById('resultSummary').innerHTML = `
-    <div class="result-card pass"><div class="count">${pass}</div><div class="label">通过</div></div>
-    <div class="result-card fail"><div class="count">${fail}</div><div class="label">未通过</div></div>
-    <div class="result-card warn"><div class="count">${warn}</div><div class="label">需确认</div></div>
-    <div class="result-card manual"><div class="count">${manual}</div><div class="label">人工核实</div></div>
-  `;
-
-  // Check items
-  const icons = { pass: '&#10004;', fail: '&#10008;', warn: '&#9888;', manual: '&#128065;', pending: '&#9203;' };
-  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实', pending: '待检查' };
-  document.getElementById('checkItems').innerHTML = cat.checks.map(c => {
-    const r = results[c.id] || { status:'pending', detail:'' };
-    return `
-      <div class="check-item ${r.status}">
-        <div class="status-icon">${icons[r.status]}</div>
-        <div class="check-body">
-          <div class="check-label">${c.label}</div>
-          <div class="check-desc">${c.desc}</div>
-          ${r.detail ? '<div class="check-detail">'+r.detail+'</div>' : ''}
-        </div>
-        <span class="status-badge">${labels[r.status]}</span>
-      </div>
-    `;
-  }).join('');
-
-  // Verdict
-  const vEl = document.getElementById('verdict');
-  if (fail > 0) {
-    vEl.className = 'verdict fail';
-    vEl.innerHTML = '&#10008; 发现 ' + fail + ' 项未通过，请修正后重新检查';
-  } else if (warn > 0 || manual > 0) {
-    vEl.className = 'verdict warn';
-    vEl.innerHTML = '&#9888; 自动检查项已通过，还有 ' + (warn + manual) + ' 项需要人工确认';
-  } else {
-    vEl.className = 'verdict pass';
-    vEl.innerHTML = '&#10004; 所有检查项均已通过！';
-  }
-}
-
-// ============================================================
-// Export
-// ============================================================
-function exportReport() {
-  const cat = CATEGORIES.find(c => c.id === state.categoryId);
-  if (!cat || !state.checkResults) return;
-
-  const results = state.checkResults;
-  const labels = { pass: '通过', fail: '未通过', warn: '需确认', manual: '人工核实' };
-
-  let text = '物料质量检查报告\n';
-  text += '类别: ' + cat.name + '\n';
-  text += '检查时间: ' + new Date().toLocaleString() + '\n';
-  text += '上传图片: ' + state.images.length + ' 张\n';
-  text += '---\n';
-  for (const c of cat.checks) {
-    const r = results[c.id] || { status:'pending', detail:'' };
-    const icon = r.status === 'pass' ? '[通过]' : r.status === 'fail' ? '[未通过]' : r.status === 'warn' ? '[需确认]' : r.status === 'manual' ? '[人工]' : '[待查]';
-    text += icon + ' ' + c.label + '\n';
-    if (r.detail) text += '  详情: ' + r.detail + '\n';
-  }
-
-  const blob = new Blob([text], { type:'text/plain;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'QA检查报告_' + cat.id + '_' + new Date().toISOString().slice(0,10) + '.txt';
-  a.click();
-}
-
-// ============================================================
-// Start
-// ============================================================
-init();
-updateStepUI();
-</script>
-</body>
-</html>
+     
