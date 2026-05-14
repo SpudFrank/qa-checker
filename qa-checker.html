@@ -331,7 +331,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 // ============================================================
 // Config
 // ============================================================
-var APP_VERSION = '1.5.1';
+var APP_VERSION = '1.5.2';
 // v1.0 — 初始版本（四类检查 + Tesseract OCR + DeepSeek纠错）
 // v1.1 — 百度云OCR + 本地代理 + Netlify部署 + 逐行对照+忽略
 // v1.2 — 匹配度原因分析 + 版本号
@@ -342,6 +342,7 @@ var APP_VERSION = '1.5.1';
 // v1.4 — 支持GIF上传，OCR时自动Canvas转PNG快照
 // v1.5 — OCR跨行合并匹配：自动合并相邻OCR行与需求文本对齐
 // v1.5.1 — 新增星级评分检测：extractRating()识别★☆⭑✰等星符及OCR回退*号，社区和内宣类别增加评分比对
+// v1.5.2 — 对照表按原始文档顺序排列（OCR行号优先），解决匹配算法导致的文本顺序混乱
 
 // ============================================================
 // Data
@@ -1825,6 +1826,18 @@ function renderDiffView() {
     }
   }
 
+  // Sort pairs by document position (OCR line order, then req line order)
+  pairs.sort(function(a, b) {
+    // Compute primary sort key: OCR position (or large value if no OCR)
+    var aOcrPos = a.ocr ? (a.ocr.lineIdx != null ? a.ocr.lineIdx : 9999) : 9999;
+    var bOcrPos = b.ocr ? (b.ocr.lineIdx != null ? b.ocr.lineIdx : 9999) : 9999;
+    if (aOcrPos !== bOcrPos) return aOcrPos - bOcrPos;
+    // Secondary: req position (for unmatched req lines sorted together)
+    var aReqPos = a.req ? (a.req.lineIdx != null ? a.req.lineIdx : 9999) : 9999;
+    var bReqPos = b.req ? (b.req.lineIdx != null ? b.req.lineIdx : 9999) : 9999;
+    return aReqPos - bReqPos;
+  });
+
   // Build table rows
   var body = document.getElementById('diffTableBody');
   var html = '';
@@ -2332,18 +2345,4 @@ async function startCheck() {
         if (missing.length === 0 && found.length > 0) {
           status = 'pass'; detail = '已匹配关键词: ' + found.join('、');
         } else if (found.length > 0) {
-          status = 'warn'; detail = '已匹配: ' + found.join('、') + '；未找到: ' + missing.join('、');
-        } else {
-          status = 'warn'; detail = '未能从图片中识别到相关关键词，请人工核实。';
-        }
-        break;
-      }
-      case 'author_accurate': {
-        const re = /(?:提供|作者|攻略|Author|Guide\s*by|Created\s*by)[:：]?\s*([A-Za-z一-鿿0-9_\-]+)/gi;
-        const ra = [], oa = []; let m;
-        while ((m = re.exec(req)) !== null) ra.push(m[1].trim());
-        while ((m = re.exec(allOcr)) !== null) oa.push(m[1].trim());
-        if (ra.length === 0) {
-          status = 'warn'; detail = '需求文本中未检测到作者姓名信息，请人工确认。';
-        } else if (oa.some(a => ra.some(r => r.includes(a) || a.includes(r)))) {
-          status = '
+          status = 'warn'; detail = 
